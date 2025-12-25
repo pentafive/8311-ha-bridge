@@ -47,7 +47,7 @@ HA_DISCOVERY_PREFIX = "homeassistant"
 HA_ENTITY_BASE = "8311"
 DEBUG_MODE = True                  # Set to True for verbose logging
 TEST_MODE = False                    # Set to True to run a single test cycle instead of monitoring
-VERSION = "1.0.0"
+VERSION = "1.0.1"  # Fix SSH status timing bug
 
 # ==============================================================================
 # --- Global Variables ---
@@ -752,6 +752,14 @@ def monitor_was_110():
     publish_sensor_state("pon_mode", device_info.get('pon_mode', 'Unknown'), {"last_update": timestamp})
     publish_sensor_state("firmware_bank", device_info.get('firmware_bank', 'Unknown'), {"last_update": timestamp})
 
+    # FIX: Re-publish SSH status after discovery configs are sent
+    # This ensures Home Assistant receives initial state AFTER entity exists
+    publish_binary_sensor_state("ssh_connection_status", True, {
+        "last_update": timestamp,
+        "source": "post_discovery_sync"
+    })
+    debug_log("Re-published SSH connection status after discovery configs")
+
     print("📊 Entering monitoring loop (Ctrl+C to stop)...\n")
 
     # Main monitoring loop
@@ -839,6 +847,13 @@ def monitor_was_110():
                     "ssh_reconnections": stats['ssh_reconnections'],
                     "average_update_duration_ms": round(avg_duration, 0),
                     "version": VERSION
+                })
+
+                # Periodic SSH status - confirms connection still healthy
+                publish_binary_sensor_state("ssh_connection_status", True, {
+                    "last_update": timestamp,
+                    "consecutive_errors": stats['consecutive_errors'],
+                    "source": "monitoring_loop"
                 })
 
                 print(f"✓ Update #{stats['total_updates']}: RX={metrics.get('rx_power_dbm', 'N/A')}dBm, TX={metrics.get('tx_power_dbm', 'N/A')}dBm, Temp={metrics.get('optic_temp', 'N/A')}°C, Link={'UP' if metrics.get('pon_status', {}).get('link_up') else 'DOWN'}")

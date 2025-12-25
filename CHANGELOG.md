@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2025-12-25
+
+### Fixed
+- SSH connection status binary sensor showing "unknown" in Home Assistant
+- Root cause: State was published before MQTT discovery config, causing Home Assistant to miss initial state
+- Solution: Re-publish SSH status after discovery configs are sent, and periodically in monitoring loop
+
+### Changed
+- SSH status now includes `source` attribute ("post_discovery_sync" or "monitoring_loop")
+- SSH status published on each successful metrics collection for real-time health indication
+
 ## [1.0.0] - 2025-12-03
 
 ### Added
