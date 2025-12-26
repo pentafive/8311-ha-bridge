@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2] - 2025-12-25
+
+### Added
+- `PING_ENABLED` environment variable to control ping checks (default: disabled for container compatibility)
+- `MQTT_CLIENT_ID` environment variable for custom MQTT client identification
+- `HA_DISCOVERY_PREFIX` and `HA_ENTITY_BASE` as configurable environment variables
+- `RECONNECT_DELAY_1-4` environment variables for custom backoff timing
+- `iputils-ping` added to Docker image for optional connectivity checks
+
+### Changed
+- All configuration now loaded from environment variables (no more hardcoded defaults)
+- `DEBUG_MODE` defaults to `False` for production use
+- docker-compose.yaml now uses pure environment variable substitution (no inline fallbacks)
+- Ping check now gated behind `PING_ENABLED` flag for container-friendly operation
+
+### Thanks
+- @Felaros for the fork improvements that inspired these changes
+
 ## [1.0.1] - 2025-12-25
 
 ### Fixed

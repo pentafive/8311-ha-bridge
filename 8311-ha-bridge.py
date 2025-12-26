@@ -19,6 +19,7 @@ import sys
 import math
 import threading
 import subprocess
+import os
 from datetime import datetime, timezone
 from collections import defaultdict
 
@@ -28,26 +29,33 @@ from collections import defaultdict
 print("--- Loading Configuration ---")
 
 # --- WAS-110 Device Settings ---
-WAS_110_HOST = "192.168.11.1"       # <-- CHANGE THIS to your WAS-110 IP
-WAS_110_USER = "root"               # SSH username
-WAS_110_PASS = ""                   # SSH password (empty or "Aa123456")
-WAS_110_PORT = 22                   # SSH port
+WAS_110_HOST = os.getenv("WAS_110_HOST", "192.168.11.1")
+WAS_110_USER = os.getenv("WAS_110_USER", "root")
+WAS_110_PASS = os.getenv("WAS_110_PASS", "")
+WAS_110_PORT = int(os.getenv("WAS_110_PORT", "22"))
 
 # --- Home Assistant MQTT Broker Configuration ---
-HA_MQTT_BROKER = "homeassistant.local"    # <-- CHANGE THIS to your MQTT broker IP or hostname
-HA_MQTT_PORT = 1883                 # MQTT port
-HA_MQTT_USER = "8311-ha-bridge"                 # MQTT username (or None)
-HA_MQTT_PASS = None                 # MQTT password (or None) - SET THIS for your broker
+HA_MQTT_BROKER = os.getenv("HA_MQTT_BROKER", "homeassistant.local")
+HA_MQTT_PORT = int(os.getenv("HA_MQTT_PORT", "1883"))
+HA_MQTT_USER = os.getenv("HA_MQTT_USER", "8311-ha-bridge")
+HA_MQTT_PASS = os.getenv("HA_MQTT_PASS")
+MQTT_CLIENT_ID = os.getenv("MQTT_CLIENT_ID", "8311-ha-bridge")
 
 # --- Script Operation Settings ---
-POLL_INTERVAL_SECONDS = 60          # How often to query WAS-110
-SSH_TIMEOUT_SECONDS = 10            # SSH command timeout
-RECONNECT_DELAYS = [5, 10, 30, 60]  # Exponential backoff (seconds)
-HA_DISCOVERY_PREFIX = "homeassistant"
-HA_ENTITY_BASE = "8311"
-DEBUG_MODE = True                  # Set to True for verbose logging
-TEST_MODE = False                    # Set to True to run a single test cycle instead of monitoring
-VERSION = "1.0.1"  # Fix SSH status timing bug
+POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL_SECONDS", "60"))
+SSH_TIMEOUT_SECONDS = int(os.getenv("SSH_TIMEOUT_SECONDS", "10"))
+RECONNECT_DELAYS = [
+    int(os.getenv("RECONNECT_DELAY_1", "5")),
+    int(os.getenv("RECONNECT_DELAY_2", "10")),
+    int(os.getenv("RECONNECT_DELAY_3", "30")),
+    int(os.getenv("RECONNECT_DELAY_4", "60")),
+]
+HA_DISCOVERY_PREFIX = os.getenv("HA_DISCOVERY_PREFIX", "homeassistant")
+HA_ENTITY_BASE = os.getenv("HA_ENTITY_BASE", "8311")
+DEBUG_MODE = os.getenv("DEBUG_MODE", "False").lower() == "true"
+TEST_MODE = os.getenv("TEST_MODE", "False").lower() == "true"
+PING_ENABLED = os.getenv("PING_ENABLED", "False").lower() == "true"
+VERSION = os.getenv("VERSION", "1.0.2")
 
 # ==============================================================================
 # --- Global Variables ---
@@ -316,20 +324,22 @@ def execute_ssh_command(command):
 
 def connect_ssh():
     """
-    Tests the SSH connection by first checking host reachability via ping,
+    Tests the SSH connection by first checking host reachability via ping (if enabled),
     then executing a simple 'echo' command via SSH.
     Returns True if successful, False otherwise.
     """
     print(f"Connecting to WAS-110 at {WAS_110_HOST}...")
 
-    # First check if host is reachable via ping
-    if not check_host_reachable():
-        print(f"✗ Host {WAS_110_HOST} is not responding to ping")
-        if not TEST_MODE:
-            publish_binary_sensor_state("ssh_connection_status", False)
-        return False
-
-    print(f"✓ Host is reachable, attempting SSH connection...")
+    # First check if host is reachable via ping (only if ping is enabled)
+    if PING_ENABLED:
+        if not check_host_reachable():
+            print(f"✗ Host {WAS_110_HOST} is not responding to ping")
+            if not TEST_MODE:
+                publish_binary_sensor_state("ssh_connection_status", False)
+            return False
+        print(f"✓ Host is reachable, attempting SSH connection...")
+    else:
+        debug_log("Ping check disabled, proceeding directly to SSH")
 
     # Now try SSH connection
     if execute_ssh_command("echo 'SSH connection successful'") is not None:
@@ -367,7 +377,7 @@ def connect_mqtt():
 
     ha_mqtt_client = mqtt.Client(
         callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
-        client_id="8311-ha-bridge"
+        client_id=MQTT_CLIENT_ID
     )
 
     ha_mqtt_client.on_connect = on_connect_ha
