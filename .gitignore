@@ -33,3 +33,9 @@ config.local.py
 
 # SSH keys (if mounted)
 ssh_keys/
+
+# Local-only directories (not published)
+Archives/
+Research/
+CLAUDE.md
+GEMINI.md

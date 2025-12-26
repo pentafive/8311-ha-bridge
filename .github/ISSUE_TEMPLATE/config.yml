@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 8311 Community Discord
+    url: https://discord.pon.wiki
+    about: Get help from the 8311 community
+  - name: PON Wiki Documentation
+    url: https://pon.wiki/xgs-pon/ont/bfw-solutions/was-110/
+    about: WAS-110 documentation and guides

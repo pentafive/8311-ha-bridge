@@ -1,0 +1,55 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to 8311 ONU",
+        "description": "Enter the connection details for your XGS-PON ONU running 8311 community firmware.",
+        "data": {
+          "host": "Host",
+          "username": "Username",
+          "password": "Password",
+          "port": "SSH Port",
+          "scan_interval": "Update Interval (seconds)"
+        },
+        "data_description": {
+          "host": "IP address of the ONU (usually 192.168.11.1)",
+          "username": "SSH username (usually root)",
+          "password": "SSH password (if required)",
+          "port": "SSH port (usually 22)",
+          "scan_interval": "How often to poll for updates (10-300 seconds)"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate",
+        "description": "Please enter new credentials for {host}",
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Unable to connect to the ONU. Check the host and port.",
+      "invalid_auth": "Authentication failed. Check username and password.",
+      "timeout": "Connection timed out. Is the device reachable?",
+      "unknown": "An unknown error occurred."
+    },
+    "abort": {
+      "already_configured": "This device is already configured.",
+      "reauth_successful": "Re-authentication successful."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Configure 8311 ONU",
+        "data": {
+          "scan_interval": "Update Interval (seconds)"
+        },
+        "data_description": {
+          "scan_interval": "How often to poll for updates (10-300 seconds)"
+        }
+      }
+    }
+  }
+}

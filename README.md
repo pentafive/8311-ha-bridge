@@ -1,171 +1,155 @@
 # 8311 HA Bridge
 
-Connects to the BFW Solutions WAS-110 XGS-PON ONU and integrates fiber optic statistics into Home Assistant using MQTT Auto Discovery.
+[![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
+[![GitHub Release](https://img.shields.io/github/v/release/pentafive/8311-ha-bridge)](https://github.com/pentafive/8311-ha-bridge/releases)
+[![License](https://img.shields.io/github/license/pentafive/8311-ha-bridge)](LICENSE)
 
-This script monitors optical power levels, temperature, voltage, and link status from the WAS-110 via SSH, and publishes corresponding sensor entities to Home Assistant via your local MQTT broker.
+![8311 HA Bridge](images/8311-ha-bridge-hero.jpg)
+
+Monitor your XGS-PON fiber ONU running [8311 community firmware](https://github.com/up-n-atom/8311) directly in Home Assistant. Track optical power levels, temperatures, link status, and more.
 
 ## Features
 
-* **XGS-PON/GPON Monitoring:** Real-time monitoring of fiber optic metrics from WAS-110 ONU
-* **Multiple Metrics:** RX/TX optical power (dBm), temperature (C), voltage (V), laser bias (mA), link status
-* **Home Assistant Auto Discovery:** Automatically creates and updates sensor entities via MQTT discovery
-* **Organized HA Device:** Creates a dedicated device `8311 ONU ({SERIAL})` with all sensors grouped together
-* **SSH-Based Monitoring:** Uses native SSH to execute monitoring commands on the WAS-110
-* **Data Enrichment:**
-    * Parses I2C EEPROM data for optical metrics (EEPROM50/51)
-    * Extracts temperature, voltage, and current readings
-    * Monitors PON link status with state codes
-    * CPU temperature monitoring
-* **MQTT Compatibility:** Sanitizes device IDs and topics for MQTT/HA compatibility
+- **Real-time Fiber Monitoring** - RX/TX optical power, voltage, laser bias current
+- **Temperature Tracking** - Optic module and CPU temperatures
+- **Link Status** - PON state with detailed status codes
+- **Device Information** - Vendor, part number, firmware bank, PON mode
+- **Two Deployment Options** - Native HACS integration or Docker/MQTT bridge
 
-## Requirements
+## Supported Hardware
 
-* **Python 3:** Version 3.9 or higher (tested with 3.12)
-* **Python Libraries:** `paho-mqtt>=2.0.0` (see `requirements.txt`)
-* **WAS-110 Device:** BFW Solutions WAS-110 XGS-PON ONU with [8311 community firmware](https://github.com/up-n-atom/8311)
-* **SSH Access:** SSH client and access to WAS-110 (default: root@192.168.11.1)
-* **MQTT Broker:** An MQTT broker accessible on your network
-    * *Recommended:* The [Mosquitto broker Home Assistant Add-on](https://github.com/home-assistant/addons/blob/master/mosquitto/DOCS.md)
-* **Home Assistant MQTT Integration:**
-    * The [MQTT Integration](https://www.home-assistant.io/integrations/mqtt/) must be installed and configured
-    * MQTT Discovery must be enabled (default: `homeassistant` discovery prefix)
+This integration works with any XGS-PON ONU running **8311 community firmware**, including:
+- BFW Solutions WAS-110
+- Potron Technology GP7001X
+- Other devices supported by [8311 firmware](https://github.com/up-n-atom/8311)
 
-## Installation & Setup
+## Installation
 
-### Option 1: Python Virtual Environment
+### Option 1: HACS (Recommended)
 
-1. **Clone/Download:** Obtain the project files and place them in a dedicated directory
-2. **Create Virtual Environment:**
+1. Open HACS in Home Assistant
+2. Click the three dots menu → **Custom repositories**
+3. Add `https://github.com/pentafive/8311-ha-bridge` as an **Integration**
+4. Search for "8311 ONU Monitor" and install
+5. Restart Home Assistant
+6. Go to **Settings → Devices & Services → Add Integration**
+7. Search for "8311 ONU Monitor" and configure
+
+### Option 2: Docker/MQTT Bridge
+
+For users who prefer container deployment or need MQTT-based integration:
+
+1. **Clone the repository:**
     ```bash
-    python3 -m venv .venv
-    source .venv/bin/activate
-    ```
-3. **Install Dependencies:**
-    ```bash
-    pip install -r requirements.txt
-    ```
-4. **Configure:** Edit variables at top of `8311-ha-bridge.py` or use environment variables (see `.env.example`)
-5. **Run:**
-    ```bash
-    python3 8311-ha-bridge.py
+    git clone https://github.com/pentafive/8311-ha-bridge.git
+    cd 8311-ha-bridge
     ```
 
-### Option 2: Docker
+2. **Configure:** Copy `.env.example` to `.env` and edit:
+    ```bash
+    cp .env.example .env
+    nano .env
+    ```
 
-1. **Build:**
+3. **Run with Docker Compose:**
     ```bash
-    docker build -t 8311-ha-bridge .
+    docker-compose up -d --build
     ```
-2. **Run:**
-    ```bash
-    docker run -d --name 8311-ha-bridge \
-      -e WAS_110_HOST=192.168.11.1 \
-      -e HA_MQTT_BROKER=homeassistant.local \
-      8311-ha-bridge
-    ```
+
+See [Alternative Deployments](https://github.com/pentafive/8311-ha-bridge/wiki/Alternative-Deployments) for systemd, Proxmox LXC, Synology, and Kubernetes options.
+
+## Sensors
+
+![Sensors List](images/sensors-list.png)
+![Diagnostic Sensors](images/sensors-diagnostic.png)
+
+| Category | Sensors |
+|----------|---------|
+| **Optical** | RX Power (dBm/mW), TX Power (dBm/mW), Voltage, TX Bias Current |
+| **Temperature** | Optic Temperature, CPU0 Temperature, CPU1 Temperature |
+| **Network** | PON Link Status, SSH Connection, Ethernet Speed, PON State |
+| **Device Info** | Vendor, Part Number, Hardware Revision, PON Mode, Firmware Bank, ISP, Module Type |
+| **System** | ONU Uptime, Memory Usage, Memory Used |
+| **Diagnostics** | GPON Serial, PON Vendor ID, GTC BIP Errors, GTC FEC Corrected/Uncorrected, LODS Events |
 
 ## Configuration
 
-Edit these variables in `8311-ha-bridge.py` or set as environment variables:
+### HACS Integration
+
+Configure via the UI - no YAML required:
+- **Host** - IP address of your ONU (usually `192.168.11.1`)
+- **Username** - SSH username (usually `root`)
+- **Password** - SSH password (if required)
+- **Port** - SSH port (usually `22`)
+- **Scan Interval** - Update frequency (10-300 seconds)
+
+### Docker Bridge
+
+All configuration via environment variables. See `.env.example` for the full list.
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `WAS_110_HOST` | IP address of your WAS-110 ONU | `192.168.11.1` |
-| `WAS_110_USER` | SSH username | `root` |
-| `WAS_110_PASS` | SSH password | `""` (empty) |
-| `HA_MQTT_BROKER` | MQTT broker hostname/IP | `homeassistant.local` |
-| `HA_MQTT_PORT` | MQTT broker port | `1883` |
-| `HA_MQTT_USER` | MQTT username | `None` |
-| `HA_MQTT_PASS` | MQTT password | `None` |
-| `POLL_INTERVAL_SECONDS` | Polling interval | `60` |
-| `DEBUG_MODE` | Enable verbose logging | `False` |
-| `TEST_MODE` | Run single test cycle | `False` |
+| `WAS_110_HOST` | ONU IP address | `192.168.11.1` |
+| `WAS_110_PASS` | SSH password | `""` |
+| `HA_MQTT_BROKER` | MQTT broker host | `homeassistant.local` |
+| `HA_MQTT_PASS` | MQTT password | *required* |
 
-## Home Assistant Integration
+## Documentation
 
-Once the script is running and connected to your HA MQTT broker:
+📚 **[Full Documentation Wiki](https://github.com/pentafive/8311-ha-bridge/wiki)**
 
-1. Navigate to **Settings -> Devices & Services -> MQTT**
-2. You should see a **new device** discovered: `8311 ONU ({SERIAL_NUMBER})`
-3. Click into this device to see the associated sensor entities
-4. Add these sensors to your Lovelace dashboards!
+- [Home](https://github.com/pentafive/8311-ha-bridge/wiki/Home) - Overview and quick start
+- [UCG-Fiber Setup](https://github.com/pentafive/8311-ha-bridge/wiki/UCG-Fiber-Setup) - UniFi gateway configuration
+- [Dashboard Examples](https://github.com/pentafive/8311-ha-bridge/wiki/Dashboard-Examples) - Lovelace configs with screenshots
+- [Troubleshooting](https://github.com/pentafive/8311-ha-bridge/wiki/Troubleshooting) - Common issues and solutions
+- [Alternative Deployments](https://github.com/pentafive/8311-ha-bridge/wiki/Alternative-Deployments) - systemd, Proxmox, Synology, k8s
 
-See `examples/home_assistant_dashboard.yaml` for a sample dashboard configuration.
+## Requirements
 
-## Available Sensors
+- **ONU Device** - Any XGS-PON ONU with [8311 community firmware](https://github.com/up-n-atom/8311)
+- **SSH Access** - SSH enabled on the ONU (default: `root@192.168.11.1`)
+- **Home Assistant** - 2024.1.0 or newer (for HACS integration)
 
-### Optical Performance
-* **RX Power (dBm)** - Receiver optical power
-* **RX Power (mW)** - Receiver optical power in milliwatts
-* **TX Power (dBm)** - Transmitter optical power
-* **TX Power (mW)** - Transmitter optical power in milliwatts
-* **Voltage** - Module VCC voltage
-* **TX Bias Current** - Laser bias current in mA
-
-### Temperature
-* **Optic Temperature** - Optical module temperature
-* **CPU0 Temperature** - CPU thermal zone 0
-* **CPU1 Temperature** - CPU thermal zone 1
-
-### Network Status
-* **PON Link Status** - PON link up/down with state details
-* **SSH Connection Status** - Bridge connectivity to ONU
-* **Ethernet Speed** - Negotiated ethernet speed
-
-### Device Information
-* **Vendor Name** - Device manufacturer
-* **Part Number** - Device part number
-* **Hardware Revision** - Hardware revision
-* **PON Mode** - XGS-PON or GPON mode
-* **Firmware Bank** - Active firmware bank (A/B)
-* **Bridge Uptime** - Bridge runtime with statistics
-
-## Troubleshooting
-
-* **Script doesn't start:** Check Python version (`python3 --version`), ensure dependencies installed (`pip list`)
-* **Cannot connect to WAS-110:** Verify SSH access: `ssh root@192.168.11.1` - Check credentials and firewall rules
-* **No Connection to HA MQTT:** Verify MQTT broker settings. Check HA MQTT broker logs
-* **Missing sensors in HA:** Ensure MQTT Discovery is enabled. Check MQTT Explorer for discovery messages
-* **SSH timeouts:** The WAS-110 has aggressive rate limiting. The script combines commands to avoid this, but the device may need a few seconds between connection attempts
-* **Device not responding:** The WAS-110 may enter a low-power state. Accessing the web UI at https://192.168.11.1 may "wake" it
+### For Docker Bridge Only
+- **MQTT Broker** - Mosquitto or compatible broker
+- **MQTT Integration** - Home Assistant MQTT integration with discovery enabled
 
 ## Technical Details
 
 ### Data Sources
 
-The script reads data from multiple sources on the WAS-110:
+The integration reads from multiple sources on the ONU:
 
-1. **EEPROM51** (`/sys/class/pon_mbox/pon_mbox0/device/eeprom51`) - Real-time optical diagnostics
-2. **EEPROM50** (`/sys/class/pon_mbox/pon_mbox0/device/eeprom50`) - Static device information
+1. **EEPROM51** - Real-time optical diagnostics (power, temperature, voltage)
+2. **EEPROM50** - Static device information (vendor, serial, part number)
 3. **sysfs** - CPU temperatures, ethernet speed
-4. **8311 shell functions** - PON status (`pon psg`), firmware bank (`active_fwbank`)
-5. **UCI config** - PON mode detection
+4. **8311 shell** - PON status, firmware bank, GTC counters
+5. **UCI config** - PON mode, GPON serial, vendor ID
+6. **/proc** - System uptime, memory usage
 
-### SSH Implementation
+## Version History
 
-The script uses the native `ssh` command via Python's `subprocess` module rather than paramiko. This approach was chosen after debugging revealed authentication compatibility issues between paramiko and the WAS-110's Dropbear SSH server.
+See [CHANGELOG.md](CHANGELOG.md) for full release history.
 
-Commands are combined into single SSH sessions using delimiters to avoid the device's aggressive SSH rate limiting.
-
-## Project Status
-
-**Version:** 1.0.0
-**Status:** Production Ready
+| Version | Type | Description |
+|---------|------|-------------|
+| 2.0.0 | HACS | Native Home Assistant integration |
+| 1.0.x | Docker | MQTT bridge for container deployment |
 
 ## License
 
-This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+Apache License 2.0 - see [LICENSE](LICENSE) for details.
 
 ## Acknowledgements
 
-* **8311 Community:** For the excellent WAS-110 firmware at [github.com/up-n-atom/8311](https://github.com/up-n-atom/8311)
-* **PON dot WIKI:** For comprehensive documentation at [pon.wiki](https://pon.wiki/)
-* **Home Assistant Project:** For the amazing home automation platform
-* **Eclipse Paho MQTT Python Client Library:** (`paho-mqtt`)
+- **[8311 Community](https://github.com/up-n-atom/8311)** - Firmware and documentation
+- **[PON Wiki](https://pon.wiki/)** - Comprehensive XGS-PON resources
+- **[Home Assistant](https://www.home-assistant.io/)** - Home automation platform
+- **[@Felaros](https://github.com/Felaros)** - Docker improvements in v1.0.2
 
 ## Resources
 
-* [8311 Community GitHub](https://github.com/up-n-atom/8311)
-* [WAS-110 Documentation - PON Wiki](https://pon.wiki/xgs-pon/ont/bfw-solutions/was-110/)
-* [8311 Community Discord](https://discord.pon.wiki)
-* [Home Assistant MQTT Integration](https://www.home-assistant.io/integrations/mqtt/)
+- [8311 Community GitHub](https://github.com/up-n-atom/8311)
+- [8311 Community Discord](https://discord.pon.wiki)
+- [PON Wiki - WAS-110](https://pon.wiki/xgs-pon/ont/bfw-solutions/was-110/)
+- [Home Assistant MQTT Integration](https://www.home-assistant.io/integrations/mqtt/)

@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2025-12-26
+
+### Added
+- **HACS Integration** - Native Home Assistant custom component
+- Config Flow UI - No more YAML configuration required
+- Options Flow - Change scan interval without reconfiguring
+- Re-authentication flow - Handle credential changes gracefully
+- Diagnostics platform - Export device info for troubleshooting (with sensitive data redaction)
+- Async SSH via `asyncssh` library - Non-blocking data fetching
+- DataUpdateCoordinator pattern - Modern HA polling architecture
+- CI/CD workflows - HACS validation, Hassfest, Ruff linting
+- Unit tests framework with pytest
+- **New Sensors:**
+  - ISP detection from GPON serial prefix (AT&T, Frontier, Bell Canada, etc.)
+  - GPON Serial (disabled by default for privacy)
+  - Module Type (potron, bfw, etc.)
+  - PON Vendor ID
+  - ONU Uptime with human-readable formatting
+  - Memory Usage (percentage and KB)
+  - PON State name and time in state
+  - GTC counters: BIP Errors, FEC Corrected/Uncorrected, LODS Events
+
+### Fixed
+- PON Link status showing "Disconnected" when connected (was parsing `state=` but actual output is `current=`)
+
+### Changed
+- Integration now installs via HACS or manual `custom_components/` copy
+- Uses `asyncssh` instead of subprocess SSH for async compatibility
+- Entity naming follows HA 2024 conventions (`has_entity_name = True`)
+- Unique IDs based on device serial number (immutable)
+
+### Migration
+The Docker/MQTT bridge (`8311-ha-bridge.py`) remains available for users who prefer that deployment method. The HACS integration is a new alternative that runs natively in Home Assistant.
+
+### Technical
+- Target: Home Assistant 2024.1.0+
+- Python 3.12+
+- Follows HA Quality Scale Silver/Gold patterns
+
 ## [1.0.2] - 2025-12-25
 
 ### Added
@@ -63,5 +102,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Planned
-- HACS integration packaging
+- Submit to HACS default repository
 - Optional SSH connection multiplexing (ControlMaster)
+- Web UI scraping for additional metrics

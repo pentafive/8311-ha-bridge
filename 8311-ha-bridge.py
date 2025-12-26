@@ -1,27 +1,26 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 
 """
 8311 HA Bridge - WAS-110 XGS-PON ONU to Home Assistant MQTT Bridge
-Version: 1.0.0
+Version: 2.0.0
 Author: pentafive
 Based on: Gemini session research + Claude architecture
 
 Monitors BFW Solutions WAS-110 fiber optic statistics and publishes to Home Assistant
 """
 
-import paho.mqtt.client as mqtt
 import base64
 import json
-import time
-import re
-import sys
 import math
-import threading
-import subprocess
 import os
-from datetime import datetime, timezone
-from collections import defaultdict
+import re
+import subprocess
+import sys
+import threading
+import time
+from datetime import UTC, datetime
+
+import paho.mqtt.client as mqtt
 
 # ==============================================================================
 # --- Configuration ---
@@ -55,7 +54,7 @@ HA_ENTITY_BASE = os.getenv("HA_ENTITY_BASE", "8311")
 DEBUG_MODE = os.getenv("DEBUG_MODE", "False").lower() == "true"
 TEST_MODE = os.getenv("TEST_MODE", "False").lower() == "true"
 PING_ENABLED = os.getenv("PING_ENABLED", "False").lower() == "true"
-VERSION = os.getenv("VERSION", "1.0.2")
+VERSION = os.getenv("VERSION", "2.0.0")
 
 # ==============================================================================
 # --- Global Variables ---
@@ -100,6 +99,24 @@ PON_STATES = {
     90: "O9 - Upstream tuning state",
 }
 
+# ISP detection from GPON serial prefix
+# Reference: https://pon.wiki and https://hack-gpon.org/vendor/
+ISP_PREFIXES = {
+    # AT&T devices
+    "HUMA": "AT&T",  # Humax BGW320-500
+    "NOKA": "AT&T",  # Nokia BGW320-505
+    "COMM": "AT&T",  # CommScope BGW620-700
+    # Frontier devices
+    "FTRO": "Frontier",  # FOX222, FRX523
+    # Bell Canada
+    "ALCL": "Bell Canada",  # Nokia/Alcatel-Lucent
+    "SMBS": "Bell Canada",  # Sagemcom Giga Hub
+    # Other ISPs (extend as needed)
+    "HWTC": "Huawei ISP",
+    "ZTEG": "ZTE ISP",
+    "UBNT": "Ubiquiti",
+}
+
 # ==============================================================================
 # --- Helper Functions ---
 # ==============================================================================
@@ -127,11 +144,18 @@ def watts_to_dbm(mw):
 
 def get_iso_timestamp():
     """Get current timestamp in ISO 8601 format"""
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 def get_pon_state_name(state_code):
     """Get human-readable PON state name"""
     return PON_STATES.get(state_code, f"Unknown state {state_code}")
+
+def detect_isp_from_serial(gpon_serial):
+    """Detect ISP from GPON serial prefix"""
+    if not gpon_serial or len(gpon_serial) < 4:
+        return "Unknown"
+    prefix = gpon_serial[:4].upper()
+    return ISP_PREFIXES.get(prefix, "Unknown")
 
 # ==============================================================================
 # --- Data Parsing Functions ---
@@ -337,7 +361,7 @@ def connect_ssh():
             if not TEST_MODE:
                 publish_binary_sensor_state("ssh_connection_status", False)
             return False
-        print(f"✓ Host is reachable, attempting SSH connection...")
+        print("✓ Host is reachable, attempting SSH connection...")
     else:
         debug_log("Ping check disabled, proceeding directly to SSH")
 
@@ -357,15 +381,16 @@ def connect_ssh():
 # --- MQTT Connection ---
 # ==============================================================================
 
-def on_connect_ha(client, userdata, flags, rc, properties=None):
-    """Callback when connected to Home Assistant MQTT broker"""
+def on_connect_ha(client, userdata, flags, rc, properties=None):  # noqa: ARG001
+    """Callback when connected to Home Assistant MQTT broker."""
     if rc == 0:
         print("✓ Connected to Home Assistant MQTT broker")
     else:
         print(f"✗ Failed to connect to MQTT broker, return code {rc}")
 
-def on_disconnect_ha(client, userdata, flags, rc, properties=None):
-    """Callback when disconnected from HA MQTT broker"""
+
+def on_disconnect_ha(client, userdata, flags, rc, properties=None):  # noqa: ARG001
+    """Callback when disconnected from HA MQTT broker."""
     if rc != 0:
         print(f"⚠ Unexpected MQTT disconnect, return code {rc}")
 
@@ -453,7 +478,7 @@ def get_device_config():
         "configuration_url": f"https://{WAS_110_HOST}"
     }
 
-def publish_sensor_discovery(sensor_id, sensor_name, unit=None, device_class=None, icon=None, state_class=None):
+def publish_sensor_discovery(sensor_id, sensor_name, unit=None, device_class=None, icon=None, state_class=None, entity_category=None, enabled_by_default=True):
     """Publish MQTT discovery config for a sensor"""
     device_id = f"8311_onu_{sanitize_for_mqtt(device_serial)}"
     unique_id = f"{device_id}_{sensor_id}"
@@ -474,6 +499,10 @@ def publish_sensor_discovery(sensor_id, sensor_name, unit=None, device_class=Non
         config["icon"] = icon
     if state_class:
         config["state_class"] = state_class
+    if entity_category:
+        config["entity_category"] = entity_category
+    if not enabled_by_default:
+        config["enabled_by_default"] = False
 
     discovery_topic = f"{HA_DISCOVERY_PREFIX}/sensor/{device_id}/{sensor_id}/config"
     publish_mqtt(discovery_topic, config, retain=True, qos=1)
@@ -545,12 +574,19 @@ def collect_device_info():
 
     try:
         # Execute all commands in a single SSH session
+        # Commands match HACS coordinator for compatibility
         combined_command = (
-            "cat /sys/class/pon_mbox/pon_mbox0/device/eeprom50 | base64 && "
+            "cat /sys/class/pon_mbox/pon_mbox0/device/eeprom50 2>/dev/null | base64 && "
             "echo '===DELIMITER===' && "
             "uci get gpon.ponip.pon_mode 2>/dev/null || echo unknown && "
             "echo '===DELIMITER===' && "
-            ". /lib/8311.sh && active_fwbank 2>/dev/null || echo unknown"
+            ". /lib/8311.sh 2>/dev/null && active_fwbank 2>/dev/null || echo unknown && "
+            "echo '===DELIMITER===' && "
+            "uci get gpon.ploam.nSerial 2>/dev/null || echo unknown && "
+            "echo '===DELIMITER===' && "
+            ". /lib/8311.sh 2>/dev/null && get_8311_module_type 2>/dev/null || echo unknown && "
+            "echo '===DELIMITER===' && "
+            ". /lib/8311.sh 2>/dev/null && get_8311_vendor_id 2>/dev/null || echo unknown"
         )
 
         combined_output = execute_ssh_command(combined_command)
@@ -563,7 +599,7 @@ def collect_device_info():
         outputs = combined_output.decode('utf-8', errors='ignore').split('===DELIMITER===')
 
         if len(outputs) < 3:
-            print(f"⚠ Expected 3 output sections, got {len(outputs)}")
+            print(f"⚠ Expected at least 3 output sections, got {len(outputs)}")
             return False
 
         # Part 1: Get EEPROM50 data
@@ -594,11 +630,38 @@ def collect_device_info():
         else:
             device_info['firmware_bank'] = 'Unknown'
 
+        # Part 4: Get GPON serial (spoofed ISP serial)
+        if len(outputs) > 3:
+            gpon_sn_raw = outputs[3].strip()
+            if gpon_sn_raw and gpon_sn_raw.lower() != 'unknown':
+                device_info['gpon_serial'] = gpon_sn_raw
+                device_info['isp'] = detect_isp_from_serial(gpon_sn_raw)
+            else:
+                device_info['gpon_serial'] = 'Unknown'
+                device_info['isp'] = 'Unknown'
+
+        # Part 5: Get module type
+        if len(outputs) > 4:
+            module_type_raw = outputs[4].strip()
+            if module_type_raw and module_type_raw.lower() != 'unknown':
+                device_info['module_type'] = module_type_raw
+            else:
+                device_info['module_type'] = 'Unknown'
+
+        # Part 6: Get PON vendor ID
+        if len(outputs) > 5:
+            vendor_id_raw = outputs[5].strip()
+            if vendor_id_raw and vendor_id_raw.lower() != 'unknown':
+                device_info['pon_vendor_id'] = vendor_id_raw
+            else:
+                device_info['pon_vendor_id'] = 'Unknown'
+
         # Set device serial (use part number + last 4 of vendor name as fallback)
         device_serial = f"WAS110_{device_info.get('part_number', 'unknown')[:6]}"
 
         print(f"✓ Device: {device_info.get('vendor_name')} {device_info.get('part_number')} Rev {device_info.get('revision')}")
         print(f"✓ PON Mode: {device_info.get('pon_mode')}, Firmware: Bank {device_info.get('firmware_bank')}")
+        print(f"✓ ISP: {device_info.get('isp')}, Module: {device_info.get('module_type')}")
 
         return True
 
@@ -618,17 +681,23 @@ def collect_metrics():
 
     try:
         # Execute all commands in a single SSH session to avoid rate limiting
-        # Use echo statements as delimiters to split the output
+        # Commands match HACS coordinator for compatibility
         combined_command = (
-            "cat /sys/class/pon_mbox/pon_mbox0/device/eeprom51 | base64 && "
+            "cat /sys/class/pon_mbox/pon_mbox0/device/eeprom51 2>/dev/null | base64 && "
             "echo '===DELIMITER===' && "
-            "cat /sys/class/thermal/thermal_zone0/temp && "
+            "cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null && "
             "echo '===DELIMITER===' && "
-            "cat /sys/class/thermal/thermal_zone1/temp && "
+            "cat /sys/class/thermal/thermal_zone1/temp 2>/dev/null && "
             "echo '===DELIMITER===' && "
-            "cat /sys/class/net/eth0_0/speed && "
+            "cat /sys/class/net/eth0_0/speed 2>/dev/null && "
             "echo '===DELIMITER===' && "
-            "pon psg"
+            "pon psg 2>/dev/null && "
+            "echo '===DELIMITER===' && "
+            "cat /proc/uptime 2>/dev/null && "
+            "echo '===DELIMITER===' && "
+            "free 2>/dev/null | grep Mem && "
+            "echo '===DELIMITER===' && "
+            "pon gtc_counters_get 2>/dev/null"
         )
 
         combined_output = execute_ssh_command(combined_command)
@@ -641,7 +710,7 @@ def collect_metrics():
         outputs = combined_output.decode('utf-8', errors='ignore').split('===DELIMITER===')
 
         if len(outputs) < 5:
-            debug_log(f"Expected 5 output sections, got {len(outputs)}")
+            debug_log(f"Expected at least 5 output sections, got {len(outputs)}")
             return None
 
         # 1. Parse EEPROM51 (optical metrics)
@@ -684,6 +753,53 @@ def collect_metrics():
             pon_status = parse_pon_status(pon_status_raw)
             if pon_status:
                 metrics['pon_status'] = pon_status
+
+        # 6. Parse ONU uptime
+        if len(outputs) > 5:
+            uptime_raw = outputs[5].strip()
+            if uptime_raw:
+                try:
+                    uptime_seconds = int(float(uptime_raw.split()[0]))
+                    metrics['onu_uptime'] = uptime_seconds
+                except (ValueError, IndexError):
+                    debug_log("Could not parse ONU uptime")
+
+        # 7. Parse memory info (from 'free | grep Mem')
+        # Format: Mem:  total  used  free  shared  buff/cache  available
+        if len(outputs) > 6:
+            meminfo_raw = outputs[6].strip()
+            if meminfo_raw:
+                try:
+                    parts = meminfo_raw.split()
+                    # parts[0] = "Mem:", parts[1] = total, parts[2] = used, etc.
+                    if len(parts) >= 3 and parts[0].startswith('Mem'):
+                        mem_total = int(parts[1])
+                        mem_used = int(parts[2])
+                        if mem_total > 0:
+                            metrics['memory_used'] = mem_used
+                            metrics['memory_percent'] = round((mem_used / mem_total) * 100, 1)
+                except (ValueError, IndexError):
+                    debug_log("Could not parse memory info")
+
+        # 8. Parse GTC counters (from 'pon gtc_counters_get')
+        # Format: errorcode=0 bip_errors=0 disc_gem_frames=... fec_codewords_corr=0 ...
+        if len(outputs) > 7:
+            gtc_raw = outputs[7].strip()
+            if gtc_raw:
+                try:
+                    for part in gtc_raw.split():
+                        if '=' in part:
+                            key, value = part.split('=', 1)
+                            if key == 'bip_errors':
+                                metrics['gtc_bip_errors'] = int(value)
+                            elif key == 'fec_codewords_corr':
+                                metrics['gtc_fec_corrected'] = int(value)
+                            elif key == 'fec_codewords_uncorr':
+                                metrics['gtc_fec_uncorrected'] = int(value)
+                            elif key == 'lods_events':
+                                metrics['gtc_lods_events'] = int(value)
+                except (ValueError, IndexError):
+                    debug_log("Could not parse GTC counters")
 
         duration = (time.time() - start_time) * 1000
         stats['update_durations'].append(duration)
@@ -736,6 +852,27 @@ def publish_all_discovery():
     publish_sensor_discovery("pon_mode", "PON Mode", None, None, "mdi:wan")
     publish_sensor_discovery("firmware_bank", "Active Firmware Bank", None, None, "mdi:alphabet-latin")
 
+    # New v2.0 sensors - ISP and system info (main sensors)
+    publish_sensor_discovery("isp", "ISP", None, None, "mdi:web")
+
+    # Diagnostic sensors (hidden in diagnostic section)
+    publish_sensor_discovery("gpon_serial", "GPON Serial", None, None, "mdi:identifier", None, "diagnostic", False)  # Disabled by default - sensitive
+    publish_sensor_discovery("module_type", "Module Type", None, None, "mdi:chip", None, "diagnostic")
+    publish_sensor_discovery("pon_vendor_id", "PON Vendor ID", None, None, "mdi:identifier", None, "diagnostic")
+    publish_sensor_discovery("onu_uptime", "ONU Uptime", "s", "duration", "mdi:timer-outline", "total_increasing", "diagnostic")
+    publish_sensor_discovery("memory_percent", "Memory Usage", "%", None, "mdi:memory", "measurement", "diagnostic")
+    publish_sensor_discovery("memory_used", "Memory Used", "kB", None, "mdi:memory", "measurement", "diagnostic")
+
+    # PON state details
+    publish_sensor_discovery("pon_state_name", "PON State", None, None, "mdi:state-machine")
+    publish_sensor_discovery("pon_time_in_state", "PON Time in State", "s", "duration", "mdi:timer", "measurement", "diagnostic")
+
+    # GTC error counters (diagnostic)
+    publish_sensor_discovery("gtc_bip_errors", "GTC BIP Errors", None, None, "mdi:alert-circle-outline", "total_increasing", "diagnostic")
+    publish_sensor_discovery("gtc_fec_corrected", "GTC FEC Corrected", None, None, "mdi:check-circle-outline", "total_increasing", "diagnostic")
+    publish_sensor_discovery("gtc_fec_uncorrected", "GTC FEC Uncorrected", None, None, "mdi:close-circle-outline", "total_increasing", "diagnostic")
+    publish_sensor_discovery("gtc_lods_events", "GTC LODS Events", None, None, "mdi:signal-off", "total_increasing", "diagnostic")
+
     # System Statistics
     publish_sensor_discovery("bridge_uptime", "Bridge Uptime", "s", "duration", "mdi:timer-outline", "total_increasing")
 
@@ -761,6 +898,12 @@ def monitor_was_110():
     publish_sensor_state("hardware_revision", device_info.get('revision', 'Unknown'), {"last_update": timestamp})
     publish_sensor_state("pon_mode", device_info.get('pon_mode', 'Unknown'), {"last_update": timestamp})
     publish_sensor_state("firmware_bank", device_info.get('firmware_bank', 'Unknown'), {"last_update": timestamp})
+
+    # Publish new v2.0 device info sensors
+    publish_sensor_state("isp", device_info.get('isp', 'Unknown'), {"last_update": timestamp})
+    publish_sensor_state("gpon_serial", device_info.get('gpon_serial', 'Unknown'), {"last_update": timestamp})
+    publish_sensor_state("module_type", device_info.get('module_type', 'Unknown'), {"last_update": timestamp})
+    publish_sensor_state("pon_vendor_id", device_info.get('pon_vendor_id', 'Unknown'), {"last_update": timestamp})
 
     # FIX: Re-publish SSH status after discovery configs are sent
     # This ensures Home Assistant receives initial state AFTER entity exists
@@ -836,6 +979,51 @@ def monitor_was_110():
                         "link_detected": speed > 0,
                         "speed_formatted": f"{speed_gbps} Gbps" if speed_gbps > 0 else f"{speed} Mbps"
                     })
+
+                # Publish new v2.0 runtime metrics
+                # ONU uptime
+                if 'onu_uptime' in metrics:
+                    uptime_secs = metrics['onu_uptime']
+                    hours = uptime_secs // 3600
+                    minutes = (uptime_secs % 3600) // 60
+                    days = hours // 24
+                    formatted = f"{days}d {hours % 24}h {minutes}m" if days > 0 else f"{hours}h {minutes}m"
+                    publish_sensor_state("onu_uptime", uptime_secs, {
+                        "last_update": timestamp,
+                        "formatted": formatted
+                    })
+
+                # Memory usage
+                if 'memory_percent' in metrics:
+                    publish_sensor_state("memory_percent", metrics['memory_percent'], {
+                        "last_update": timestamp
+                    })
+                if 'memory_used' in metrics:
+                    publish_sensor_state("memory_used", metrics['memory_used'], {
+                        "last_update": timestamp
+                    })
+
+                # PON state details
+                if 'pon_status' in metrics:
+                    pon = metrics['pon_status']
+                    publish_sensor_state("pon_state_name", pon['state_name'], {
+                        "last_update": timestamp,
+                        "state_code": pon['state_code']
+                    })
+                    publish_sensor_state("pon_time_in_state", pon.get('time_in_state_seconds', 0), {
+                        "last_update": timestamp,
+                        "formatted": pon.get('time_in_state_formatted', '0s')
+                    })
+
+                # GTC counters
+                if 'gtc_bip_errors' in metrics:
+                    publish_sensor_state("gtc_bip_errors", metrics['gtc_bip_errors'], {"last_update": timestamp})
+                if 'gtc_fec_corrected' in metrics:
+                    publish_sensor_state("gtc_fec_corrected", metrics['gtc_fec_corrected'], {"last_update": timestamp})
+                if 'gtc_fec_uncorrected' in metrics:
+                    publish_sensor_state("gtc_fec_uncorrected", metrics['gtc_fec_uncorrected'], {"last_update": timestamp})
+                if 'gtc_lods_events' in metrics:
+                    publish_sensor_state("gtc_lods_events", metrics['gtc_lods_events'], {"last_update": timestamp})
 
                 # Update statistics
                 stats['total_updates'] += 1

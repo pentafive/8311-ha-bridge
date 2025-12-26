@@ -1,0 +1,13 @@
+{
+  "domain": "was110_8311",
+  "name": "8311 ONU Monitor",
+  "codeowners": ["@pentafive"],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/pentafive/8311-ha-bridge",
+  "integration_type": "device",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/pentafive/8311-ha-bridge/issues",
+  "requirements": ["asyncssh>=2.14.0"],
+  "version": "2.0.0"
+}
