@@ -4,6 +4,7 @@ Welcome to the 8311 HA Bridge wiki - documentation for monitoring your XGS-PON O
 
 ## Quick Links
 
+- [[KPI-Reference]] - **NEW!** Understanding each metric and what to look for
 - [[UCG-Fiber-Setup]] - UniFi gateway configuration
 - [[Troubleshooting]] - Common issues and solutions
 - [[Alternative-Deployments]] - systemd, Proxmox, Synology, etc.
@@ -13,11 +14,34 @@ Welcome to the 8311 HA Bridge wiki - documentation for monitoring your XGS-PON O
 
 8311 HA Bridge monitors your XGS-PON ONU in Home Assistant:
 
-- **Optical Power** - RX/TX levels in dBm and mW
-- **Temperature** - Optic module and CPU temps
-- **Voltage & Current** - VCC and laser bias
-- **Link Status** - PON state with detailed codes
-- **Device Info** - Firmware, serial, hardware revision
+**Optical Metrics:**
+- RX/TX Power (dBm and mW)
+- Voltage and TX Bias Current
+- Optic Temperature
+
+**System Health:**
+- CPU Temperatures (CPU0, CPU1)
+- Memory Usage (% and KB)
+- ONU Uptime
+
+**Network Status:**
+- PON Link Status with state codes
+- PON State (O5.1 Associated, etc.)
+- Ethernet Speed (10Gbps)
+- SSH Connection Health
+
+**Device Info:**
+- ISP Detection (AT&T, Frontier, Bell Canada, etc.)
+- Vendor, Part Number, Hardware Revision
+- Module Type (potron, bfw)
+- PON Mode (XGS-PON)
+- Active Firmware Bank
+
+**Diagnostics (v2.0.0+):**
+- GTC BIP Errors
+- GTC FEC Corrected/Uncorrected
+- LODS Events
+- GPON Serial, PON Vendor ID
 
 ## Supported Hardware
 
@@ -47,6 +71,20 @@ Container deployment with MQTT auto-discovery:
 3. Sensors auto-discover in Home Assistant
 
 See [README](https://github.com/pentafive/8311-ha-bridge#readme) for detailed instructions.
+
+## Screenshots
+
+### Dashboard
+
+![Dashboard](https://raw.githubusercontent.com/pentafive/8311-ha-bridge/main/images/dashboard-main.png)
+
+### Sensors
+
+![Sensors](https://raw.githubusercontent.com/pentafive/8311-ha-bridge/main/images/sensors-list.png)
+
+### Diagnostics
+
+![Diagnostics](https://raw.githubusercontent.com/pentafive/8311-ha-bridge/main/images/sensors-diagnostic.png)
 
 ## Getting Started
 

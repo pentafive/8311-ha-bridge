@@ -1,14 +1,16 @@
-# Home Assistant Lovelace Dashboard for 8311-ha-bridge
+# Home Assistant Lovelace Dashboard for 8311-ha-bridge (Docker/MQTT)
 #
-# v7: Final design based on all user feedback.
-# - Reverts to the 'tile' card with 'card-mod' for main KPIs, as seen in the user's "Pool" example. This is a known-good configuration.
-# - The "Details & Diagnostics" section is a 2-column grid to prevent text cutoff.
-# - Bridge Uptime is formatted using a Mushroom card.
+# v8: Updated for v2.0.0 with new sensors (ISP, ONU Uptime, Memory, PON State, GTC counters)
 #
-# MAKE SURE YOU HAVE THE FOLLOWING HACS INTEGRATIONS INSTALLED:
-# - card-mod: For changing the tile colors.
-# - Mushroom: For the uptime card and entity cards.
-# - history-explorer-card: For the detailed history graph.
+# REQUIRED HACS FRONTEND INTEGRATIONS:
+# - card-mod: For conditional tile colors
+# - Mushroom: For entity cards and template cards
+# - history-explorer-card: For detailed history graphs
+#
+# ENTITY ID FORMAT:
+# Docker/MQTT uses: sensor.<HA_ENTITY_BASE>_<sensor_key>
+# Default HA_ENTITY_BASE is "8311_onu_was110_xgspon"
+# Change below if you customized HA_ENTITY_BASE in .env
 #
 title: 8311 ONU Monitoring
 path: 8311-onu
@@ -21,6 +23,7 @@ cards:
     view_layout:
       grid-column: 1
     cards:
+      # === CORE OPTICAL & SYSTEM HEALTH ===
       - type: grid
         title: Core Optical & System Health
         columns: 3
@@ -104,8 +107,38 @@ cards:
                   {% elif val > 70 %} --tile-color: #ffa600;
                   {% endif %}
                 }
+
+      # === DEVICE INFO & STATUS ===
       - type: grid
-        title: Details & Diagnostics
+        title: Device Info & Status
+        columns: 3
+        square: false
+        cards:
+          - type: custom:mushroom-entity-card
+            entity: sensor.8311_onu_was110_xgspon_isp
+            name: ISP
+            icon: mdi:web
+          - type: custom:mushroom-entity-card
+            entity: sensor.8311_onu_was110_xgspon_vendor
+            name: Vendor
+          - type: custom:mushroom-entity-card
+            entity: sensor.8311_onu_was110_xgspon_module_type
+            name: Module
+            icon: mdi:memory
+          - type: custom:mushroom-entity-card
+            entity: sensor.8311_onu_was110_xgspon_part_number
+            name: Part Num
+          - type: custom:mushroom-entity-card
+            entity: sensor.8311_onu_was110_xgspon_pon_mode
+            name: PON Mode
+          - type: custom:mushroom-entity-card
+            entity: sensor.8311_onu_was110_xgspon_firmware_bank
+            name: FW Bank
+            icon: mdi:memory
+
+      # === CONNECTION & PERFORMANCE ===
+      - type: grid
+        title: Connection & Performance
         columns: 2
         square: false
         cards:
@@ -117,34 +150,55 @@ cards:
             entity: binary_sensor.8311_onu_was110_xgspon_ssh_connection
             name: SSH Link
           - type: custom:mushroom-entity-card
+            entity: sensor.8311_onu_was110_xgspon_pon_state
+            name: PON State
+            icon: mdi:state-machine
+          - type: custom:mushroom-entity-card
             entity: sensor.8311_onu_was110_xgspon_ethernet_speed
             name: Eth Speed
-          - type: custom:mushroom-entity-card
-            entity: sensor.8311_onu_was110_xgspon_cpu1_temperature
-            name: CPU1 Temp
-          - type: custom:mushroom-entity-card
-            entity: sensor.8311_onu_was110_xgspon_vendor
-            name: Vendor
-          - type: custom:mushroom-entity-card
-            entity: sensor.8311_onu_was110_xgspon_part_number
-            name: Part Num
-          - type: custom:mushroom-entity-card
-            entity: sensor.8311_onu_was110_xgspon_pon_mode
-            name: PON Mode
           - type: custom:mushroom-template-card
-            primary: Bridge Uptime
+            entity: sensor.8311_onu_was110_xgspon_onu_uptime
+            primary: ONU Uptime
             secondary: >
-              {% set uptime = states('sensor.8311_onu_was110_xgspon_bridge_uptime') | int(0) %}
+              {% set uptime = states('sensor.8311_onu_was110_xgspon_onu_uptime') | int(0) %}
               {% set days = (uptime / 86400) | int %}
               {% set hours = ((uptime % 86400) / 3600) | int %}
               {% set minutes = ((uptime % 3600) / 60) | int %}
               {%- if days > 0 -%}
-                {{ days }}d {{ hours }}h
+                {{ days }}d {{ hours }}h {{ minutes }}m
               {%- else -%}
                 {{ hours }}h {{ minutes }}m
               {%- endif -%}
-            entity: sensor.8311_onu_was110_xgspon_bridge_uptime
             icon: mdi:timer-outline
+          - type: custom:mushroom-entity-card
+            entity: sensor.8311_onu_was110_xgspon_memory_usage
+            name: Memory
+            icon: mdi:memory
+
+      # === GTC DIAGNOSTICS ===
+      - type: grid
+        title: GTC Diagnostics
+        columns: 4
+        square: false
+        cards:
+          - type: custom:mushroom-entity-card
+            entity: sensor.8311_onu_was110_xgspon_gtc_bip_errors
+            name: BIP Errors
+            icon: mdi:alert-circle-outline
+          - type: custom:mushroom-entity-card
+            entity: sensor.8311_onu_was110_xgspon_gtc_fec_corrected
+            name: FEC Corr
+            icon: mdi:check-circle-outline
+          - type: custom:mushroom-entity-card
+            entity: sensor.8311_onu_was110_xgspon_gtc_fec_uncorrected
+            name: FEC Uncorr
+            icon: mdi:close-circle-outline
+          - type: custom:mushroom-entity-card
+            entity: sensor.8311_onu_was110_xgspon_lods_events
+            name: LODS
+            icon: mdi:signal-off
+
+  # === HISTORY GRAPHS ===
   - type: custom:history-explorer-card
     view_layout:
       grid-column: 2
@@ -169,12 +223,17 @@ cards:
           - entity: sensor.8311_onu_was110_xgspon_cpu0_temperature
             name: CPU0 Temp (°C)
       - type: line
-        options: { height: 120 }
+        options: { height: 100 }
         entities:
           - entity: sensor.8311_onu_was110_xgspon_voltage
             name: Voltage (V)
       - type: line
-        options: { height: 120 }
+        options: { height: 100 }
         entities:
           - entity: sensor.8311_onu_was110_xgspon_tx_bias_current
             name: TX Bias (mA)
+      - type: line
+        options: { height: 80 }
+        entities:
+          - entity: sensor.8311_onu_was110_xgspon_memory_usage
+            name: Memory (%)

@@ -1,0 +1,238 @@
+# Home Assistant Lovelace Dashboard for 8311-ha-bridge
+#
+# v8: Updated for v2.0.0 with new sensors (ISP, ONU Uptime, Memory, PON State, GTC counters)
+#
+# REQUIRED HACS FRONTEND INTEGRATIONS:
+# - card-mod: For conditional tile colors
+# - Mushroom: For entity cards and template cards
+# - history-explorer-card: For detailed history graphs
+#
+# ENTITY ID FORMAT:
+# HACS integration uses: sensor.8311_onu_<serial>_<sensor_key>
+# Replace "092142510000336" below with YOUR device serial from HA.
+#
+title: 8311 ONU Monitoring
+path: 8311-onu
+icon: mdi:wan
+layout:
+  grid-template-columns: 60% 40%
+  grid-template-rows: auto
+cards:
+  - type: vertical-stack
+    view_layout:
+      grid-column: 1
+    cards:
+      # === CORE OPTICAL & SYSTEM HEALTH ===
+      - type: grid
+        title: Core Optical & System Health
+        columns: 3
+        square: false
+        cards:
+          - type: tile
+            entity: sensor.8311_onu_092142510000336_rx_power
+            name: RX Power
+            icon: mdi:arrow-down-bold-hexagon-outline
+            color: green
+            card_mod:
+              style: |
+                ha-card {
+                  {% set val = states(config.entity) | float(-100) %}
+                  {% if val < -28 %} --tile-color: #db4437;
+                  {% elif val < -27 %} --tile-color: #ffa600;
+                  {% endif %}
+                }
+          - type: tile
+            entity: sensor.8311_onu_092142510000336_tx_power
+            name: TX Power
+            icon: mdi:arrow-up-bold-hexagon-outline
+            color: green
+            card_mod:
+              style: |
+                ha-card {
+                  {% set val = states(config.entity) | float(0) %}
+                  {% if val < 2 or val > 9 %} --tile-color: #db4437;
+                  {% elif val < 4 or val > 7 %} --tile-color: #ffa600;
+                  {% endif %}
+                }
+          - type: tile
+            entity: sensor.8311_onu_092142510000336_optic_temperature
+            name: Optic Temp
+            icon: mdi:thermometer
+            color: green
+            card_mod:
+              style: |
+                ha-card {
+                  {% set val = states(config.entity) | float(0) %}
+                  {% if val > 70 %} --tile-color: #db4437;
+                  {% elif val > 60 %} --tile-color: #ffa600;
+                  {% endif %}
+                }
+          - type: tile
+            entity: sensor.8311_onu_092142510000336_voltage
+            name: Voltage
+            icon: mdi:flash
+            color: green
+            card_mod:
+              style: |
+                ha-card {
+                  {% set val = states(config.entity) | float(0) %}
+                  {% if val < 3.1 or val > 3.5 %} --tile-color: #db4437;
+                  {% elif val < 3.2 or val > 3.4 %} --tile-color: #ffa600;
+                  {% endif %}
+                }
+          - type: tile
+            entity: sensor.8311_onu_092142510000336_tx_bias_current
+            name: TX Bias
+            icon: mdi:current-ac
+            color: green
+            card_mod:
+              style: |
+                ha-card {
+                  {% set val = states(config.entity) | float(0) %}
+                  {% if val < 2 or val > 20 %} --tile-color: #db4437;
+                  {% elif val < 4 or val > 15 %} --tile-color: #ffa600;
+                  {% endif %}
+                }
+          - type: tile
+            entity: sensor.8311_onu_092142510000336_cpu0_temperature
+            name: CPU Temp
+            icon: mdi:chip
+            color: green
+            card_mod:
+              style: |
+                ha-card {
+                  {% set val = states(config.entity) | float(0) %}
+                  {% if val > 85 %} --tile-color: #db4437;
+                  {% elif val > 70 %} --tile-color: #ffa600;
+                  {% endif %}
+                }
+
+      # === DEVICE INFO & STATUS ===
+      - type: grid
+        title: Device Info & Status
+        columns: 3
+        square: false
+        cards:
+          - type: custom:mushroom-entity-card
+            entity: sensor.8311_onu_092142510000336_isp
+            name: ISP
+            icon: mdi:web
+          - type: custom:mushroom-entity-card
+            entity: sensor.8311_onu_092142510000336_vendor
+            name: Vendor
+          - type: custom:mushroom-entity-card
+            entity: sensor.8311_onu_092142510000336_module_type
+            name: Module
+            icon: mdi:memory
+          - type: custom:mushroom-entity-card
+            entity: sensor.8311_onu_092142510000336_part_number
+            name: Part Num
+          - type: custom:mushroom-entity-card
+            entity: sensor.8311_onu_092142510000336_pon_mode
+            name: PON Mode
+          - type: custom:mushroom-entity-card
+            entity: sensor.8311_onu_092142510000336_active_firmware_bank
+            name: FW Bank
+            icon: mdi:memory
+
+      # === CONNECTION & PERFORMANCE ===
+      - type: grid
+        title: Connection & Performance
+        columns: 2
+        square: false
+        cards:
+          - type: custom:mushroom-entity-card
+            entity: binary_sensor.8311_onu_092142510000336_pon_link
+            name: PON Link
+            icon: mdi:wan
+          - type: custom:mushroom-entity-card
+            entity: binary_sensor.8311_onu_092142510000336_ssh_connection
+            name: SSH Link
+          - type: custom:mushroom-entity-card
+            entity: sensor.8311_onu_092142510000336_pon_state
+            name: PON State
+            icon: mdi:state-machine
+          - type: custom:mushroom-entity-card
+            entity: sensor.8311_onu_092142510000336_ethernet_speed
+            name: Eth Speed
+          - type: custom:mushroom-template-card
+            entity: sensor.8311_onu_092142510000336_onu_uptime
+            primary: ONU Uptime
+            secondary: >
+              {% set uptime = states('sensor.8311_onu_092142510000336_onu_uptime') | int(0) %}
+              {% set days = (uptime / 86400) | int %}
+              {% set hours = ((uptime % 86400) / 3600) | int %}
+              {% set minutes = ((uptime % 3600) / 60) | int %}
+              {%- if days > 0 -%}
+                {{ days }}d {{ hours }}h {{ minutes }}m
+              {%- else -%}
+                {{ hours }}h {{ minutes }}m
+              {%- endif -%}
+            icon: mdi:timer-outline
+          - type: custom:mushroom-entity-card
+            entity: sensor.8311_onu_092142510000336_memory_usage
+            name: Memory
+            icon: mdi:memory
+
+      # === GTC DIAGNOSTICS ===
+      - type: grid
+        title: GTC Diagnostics
+        columns: 4
+        square: false
+        cards:
+          - type: custom:mushroom-entity-card
+            entity: sensor.8311_onu_092142510000336_gtc_bip_errors
+            name: BIP Errors
+            icon: mdi:alert-circle-outline
+          - type: custom:mushroom-entity-card
+            entity: sensor.8311_onu_092142510000336_gtc_fec_corrected
+            name: FEC Corr
+            icon: mdi:check-circle-outline
+          - type: custom:mushroom-entity-card
+            entity: sensor.8311_onu_092142510000336_gtc_fec_uncorrected
+            name: FEC Uncorr
+            icon: mdi:close-circle-outline
+          - type: custom:mushroom-entity-card
+            entity: sensor.8311_onu_092142510000336_gtc_lods_events
+            name: LODS
+            icon: mdi:signal-off
+
+  # === HISTORY GRAPHS ===
+  - type: custom:history-explorer-card
+    view_layout:
+      grid-column: 2
+    header: ONU Performance History
+    defaultTimeRange: 24h
+    refresh:
+      interval: 60
+    lineMode: stepped
+    graphs:
+      - type: line
+        options: { height: 150 }
+        entities:
+          - entity: sensor.8311_onu_092142510000336_rx_power
+            name: RX Power (dBm)
+          - entity: sensor.8311_onu_092142510000336_tx_power
+            name: TX Power (dBm)
+      - type: line
+        options: { height: 150 }
+        entities:
+          - entity: sensor.8311_onu_092142510000336_optic_temperature
+            name: Optic Temp (°C)
+          - entity: sensor.8311_onu_092142510000336_cpu0_temperature
+            name: CPU0 Temp (°C)
+      - type: line
+        options: { height: 100 }
+        entities:
+          - entity: sensor.8311_onu_092142510000336_voltage
+            name: Voltage (V)
+      - type: line
+        options: { height: 100 }
+        entities:
+          - entity: sensor.8311_onu_092142510000336_tx_bias_current
+            name: TX Bias (mA)
+      - type: line
+        options: { height: 80 }
+        entities:
+          - entity: sensor.8311_onu_092142510000336_memory_usage
+            name: Memory (%)

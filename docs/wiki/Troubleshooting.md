@@ -2,7 +2,58 @@
 
 Common issues and solutions for 8311 HA Bridge.
 
-## Connection Issues
+## HACS Integration Issues
+
+### Integration not appearing after install
+
+**Solutions:**
+1. Restart Home Assistant (not just reload)
+2. Clear browser cache
+3. Check HACS → Integrations → 8311 ONU Monitor is installed
+
+### Sensors showing "Unknown" or "Unavailable"
+
+**Check:**
+1. SSH access to ONU: `ssh root@192.168.11.1`
+2. Correct password in integration config
+3. Network routing to 192.168.11.0/24 subnet
+
+**Debug:**
+1. Go to Settings → Devices & Services → 8311 ONU Monitor
+2. Click "1 device" → Check device info
+3. Enable debug logging:
+
+```yaml
+# configuration.yaml
+logger:
+  default: warning
+  logs:
+    custom_components.was110_8311: debug
+```
+
+### PON Link showing "Disconnected" when connected
+
+**Fixed in v2.0.0.** If still occurring:
+1. Reload the integration: Settings → Devices & Services → 8311 ONU Monitor → 3 dots → Reload
+2. Check diagnostics download for raw state_code value
+
+### New sensors not appearing after update
+
+After updating to v2.0.0:
+1. Reload integration (not just HA restart)
+2. Check Settings → Devices & Services → 8311 ONU Monitor → device
+3. New sensors like ISP, Memory, GTC counters should appear
+
+### Re-authentication required
+
+If credentials change:
+1. HA will show "Requires reconfiguration"
+2. Click Configure and enter new credentials
+3. Integration will reconnect
+
+---
+
+## Docker/MQTT Issues
 
 ### Container can't reach WAS-110
 
@@ -34,8 +85,6 @@ Common issues and solutions for 8311 HA Bridge.
 - Increase `POLL_INTERVAL_SECONDS` (default: 60)
 - Increase `SSH_TIMEOUT_SECONDS` (default: 10)
 
-## MQTT Issues
-
 ### No sensors appearing in Home Assistant
 
 **Check:**
@@ -66,6 +115,8 @@ docker logs --tail 50 8311-ha-bridge
 docker ps | grep 8311
 ```
 
+---
+
 ## Data Issues
 
 ### Incorrect optical power readings
@@ -86,6 +137,20 @@ docker ps | grep 8311
 2. Verify 8311 firmware version supports all metrics
 3. Some metrics require specific PON states (e.g., link must be up)
 
+### GTC counters always zero
+
+**Normal behavior** - GTC error counters only increment when errors occur. Zero means healthy fiber link.
+
+### ISP showing "Unknown"
+
+**Cause:** GPON serial prefix not in known ISP list
+
+**Solutions:**
+1. Check GPON Serial in diagnostics
+2. Open issue to add your ISP's prefix
+
+---
+
 ## Gateway-Specific Issues
 
 ### Alias keeps disappearing (UniFi)
@@ -104,9 +169,11 @@ grep "was110-alias" /var/log/messages | tail -10
 **Symptoms:** Container running but no data for hours/days
 
 **Prevention:**
-1. Monitor the `bridge_uptime` sensor in HA
-2. Create HA automation to alert if `ssh_connection_status` goes offline
+1. Monitor the `onu_uptime` sensor in HA (HACS) or `bridge_uptime` (Docker)
+2. Create HA automation to alert if `ssh_connection` goes offline
 3. Check alias restoration logs periodically
+
+---
 
 ## Performance Issues
 
@@ -114,7 +181,9 @@ grep "was110-alias" /var/log/messages | tail -10
 
 **Cause:** Too frequent polling
 
-**Solution:** Increase `POLL_INTERVAL_SECONDS` (default: 60, try 120)
+**Solution:**
+- HACS: Options → increase scan interval
+- Docker: Increase `POLL_INTERVAL_SECONDS` (default: 60, try 120)
 
 ### Container memory growth
 
@@ -122,8 +191,11 @@ grep "was110-alias" /var/log/messages | tail -10
 
 **Solution:** Restart container periodically or add log rotation
 
+---
+
 ## Getting Help
 
-1. Check container logs: `docker logs 8311-ha-bridge`
-2. Enable debug mode: `DEBUG_MODE=True`
-3. Open an issue with logs and configuration (scrub credentials!)
+1. **HACS:** Download diagnostics (Settings → Devices & Services → 8311 ONU Monitor → device → Download diagnostics)
+2. **Docker:** Check logs: `docker logs 8311-ha-bridge`
+3. Enable debug mode for detailed logging
+4. Open an issue with logs and configuration (scrub credentials!)

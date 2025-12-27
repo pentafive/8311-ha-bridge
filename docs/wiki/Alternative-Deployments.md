@@ -104,9 +104,15 @@ nano .env
 docker-compose up -d
 ```
 
-## Home Assistant Add-on (Future)
+## Native Home Assistant (HACS)
 
-A native HA add-on is planned for easier integration. Until then, run as a separate container.
+**Recommended for most users.** The HACS integration runs natively in Home Assistant without containers:
+
+1. Install via HACS custom repository
+2. Configure via Settings → Devices & Services
+3. No Docker, MQTT, or external dependencies
+
+See [Installation](https://github.com/pentafive/8311-ha-bridge#installation) in the README.
 
 ## Kubernetes / k3s
 
