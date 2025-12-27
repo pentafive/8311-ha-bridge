@@ -1,11 +1,11 @@
 <p align="center">
-  <img src="images/logo.png" alt="8311 HA Bridge">
+  <img src="https://raw.githubusercontent.com/pentafive/8311-ha-bridge/main/images/logo.png" alt="8311 HA Bridge">
 </p>
 
 <p align="center">
   <a href="https://github.com/hacs/integration"><img src="https://img.shields.io/badge/HACS-Custom-41BDF5.svg" alt="HACS Custom"></a>
   <a href="https://github.com/pentafive/8311-ha-bridge/releases"><img src="https://img.shields.io/github/v/release/pentafive/8311-ha-bridge" alt="GitHub Release"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/pentafive/8311-ha-bridge" alt="License"></a>
+  <a href="https://github.com/pentafive/8311-ha-bridge/blob/main/LICENSE"><img src="https://img.shields.io/github/license/pentafive/8311-ha-bridge" alt="License"></a>
 </p>
 
 Monitor your XGS-PON fiber ONU running [8311 community firmware](https://github.com/up-n-atom/8311) directly in Home Assistant. Track optical power levels, temperatures, link status, and more.
@@ -62,8 +62,8 @@ See [Alternative Deployments](https://github.com/pentafive/8311-ha-bridge/wiki/A
 
 ## Sensors
 
-![Sensors List](images/sensors-list.png)
-![Diagnostic Sensors](images/sensors-diagnostic.png)
+![Sensors List](https://raw.githubusercontent.com/pentafive/8311-ha-bridge/main/images/sensors-list.png)
+![Diagnostic Sensors](https://raw.githubusercontent.com/pentafive/8311-ha-bridge/main/images/sensors-diagnostic.png)
 
 | Category | Sensors |
 |----------|---------|
