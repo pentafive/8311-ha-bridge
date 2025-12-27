@@ -1,3 +1,5 @@
+![8311 HA Bridge](https://raw.githubusercontent.com/pentafive/8311-ha-bridge/main/images/logo.png)
+
 # 8311 HA Bridge Wiki
 
 Welcome to the 8311 HA Bridge wiki - documentation for monitoring your XGS-PON ONU running [8311 community firmware](https://github.com/up-n-atom/8311) with Home Assistant.
@@ -80,11 +82,8 @@ See [README](https://github.com/pentafive/8311-ha-bridge#readme) for detailed in
 
 ### Sensors
 
-![Sensors](https://raw.githubusercontent.com/pentafive/8311-ha-bridge/main/images/sensors-list.png)
-
-### Diagnostics
-
-![Diagnostics](https://raw.githubusercontent.com/pentafive/8311-ha-bridge/main/images/sensors-diagnostic.png)
+![Sensors List](https://raw.githubusercontent.com/pentafive/8311-ha-bridge/main/images/sensors-list.png)
+![Diagnostic Sensors](https://raw.githubusercontent.com/pentafive/8311-ha-bridge/main/images/sensors-diagnostic.png)
 
 ## Getting Started
 
