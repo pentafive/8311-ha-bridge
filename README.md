@@ -6,6 +6,7 @@
   <a href="https://github.com/hacs/integration"><img src="https://img.shields.io/badge/HACS-Custom-41BDF5.svg" alt="HACS Custom"></a>
   <a href="https://github.com/pentafive/8311-ha-bridge/releases"><img src="https://img.shields.io/github/v/release/pentafive/8311-ha-bridge" alt="GitHub Release"></a>
   <a href="https://github.com/pentafive/8311-ha-bridge/blob/main/LICENSE"><img src="https://img.shields.io/github/license/pentafive/8311-ha-bridge" alt="License"></a>
+  <a href="https://buymeacoffee.com/pentafive"><img src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Support-FFDD00?logo=buymeacoffee&logoColor=black" alt="Buy Me a Coffee"></a>
 </p>
 
 Monitor your XGS-PON fiber ONU running [8311 community firmware](https://github.com/up-n-atom/8311) directly in Home Assistant. Track optical power levels, temperatures, link status, and more.
@@ -16,6 +17,7 @@ Monitor your XGS-PON fiber ONU running [8311 community firmware](https://github.
 - **Temperature Tracking** - Optic module and CPU temperatures
 - **Link Status** - PON state with detailed status codes
 - **Device Information** - Vendor, part number, firmware bank, PON mode
+- **Health Monitoring** - Rolling availability, error tracking, SSH reconnection counting, ONU reboot detection
 - **Two Deployment Options** - Native HACS integration or Docker/MQTT bridge
 
 ## Supported Hardware
@@ -73,6 +75,7 @@ See [Alternative Deployments](https://github.com/pentafive/8311-ha-bridge/wiki/A
 | **Device Info** | Vendor, Part Number, Hardware Revision, PON Mode, Firmware Bank, ISP, Module Type |
 | **System** | ONU Uptime, Memory Usage, Memory Used |
 | **Diagnostics** | GPON Serial, PON Vendor ID, GTC BIP Errors, GTC FEC Corrected/Uncorrected, LODS Events |
+| **Health Monitoring** | Consecutive Errors, SSH Reconnections, Error Rate, Total Updates, Availability %, ONU Reboot Count, Last Reboot Detected |
 
 ## Configuration
 
@@ -135,8 +138,14 @@ See [CHANGELOG.md](CHANGELOG.md) for full release history.
 
 | Version | Type | Description |
 |---------|------|-------------|
+| 2.1.0 | Both | Health monitoring sensors, SSH leak fix, MQTT LWT |
 | 2.0.0 | HACS | Native Home Assistant integration |
 | 1.0.x | Docker | MQTT bridge for container deployment |
+
+## Support
+
+If you find this integration useful:
+- [Buy Me a Coffee](https://buymeacoffee.com/pentafive) — Support development of this and other HA integrations
 
 ## License
 

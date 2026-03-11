@@ -6,7 +6,8 @@ import base64
 import contextlib
 import logging
 import math
-from datetime import timedelta
+from collections import deque
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import asyncssh
@@ -42,6 +43,16 @@ class WAS110Coordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._connection: asyncssh.SSHClientConnection | None = None
         self._device_info: dict[str, Any] = {}
         self._consecutive_errors = 0
+
+        # Health monitoring stats (v2.1.0)
+        self._total_updates: int = 0
+        self._total_errors: int = 0
+        self._ssh_reconnections: int = 0
+        self._was_disconnected: bool = False
+        self._poll_results: deque[bool] = deque(maxlen=60)
+        self._previous_uptime: int | None = None
+        self._reboot_count: int = 0
+        self._last_reboot_detected: str | None = None
 
         scan_interval = entry.options.get(
             CONF_SCAN_INTERVAL,
@@ -80,11 +91,23 @@ class WAS110Coordinator(DataUpdateCoordinator[dict[str, Any]]):
         except (OSError, asyncssh.Error) as err:
             raise UpdateFailed(f"Unable to connect to {self.host}: {err}") from err
 
+    async def _close_connection(self) -> None:
+        """Close the SSH connection gracefully."""
+        if self._connection and not self._connection.is_closed:
+            self._connection.close()
+            with contextlib.suppress(Exception):
+                await asyncio.wait_for(self._connection.wait_closed(), timeout=5)
+        self._connection = None
+
     async def _async_run_command(self, command: str) -> str | None:
         """Run a command on the ONU."""
         try:
             if self._connection is None or self._connection.is_closed:
+                if self._was_disconnected:
+                    self._ssh_reconnections += 1
+                    _LOGGER.debug("SSH reconnection #%d", self._ssh_reconnections)
                 self._connection = await self._async_connect()
+                self._was_disconnected = False
 
             result = await asyncio.wait_for(
                 self._connection.run(command, check=True),
@@ -93,14 +116,16 @@ class WAS110Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             return result.stdout.strip()
         except TimeoutError:
             _LOGGER.warning("Command timed out: %s", command)
-            self._connection = None
+            self._was_disconnected = True
+            await self._close_connection()
             return None
         except asyncssh.ProcessError as err:
             _LOGGER.warning("Command failed: %s - %s", command, err)
             return None
         except (OSError, asyncssh.Error) as err:
             _LOGGER.warning("SSH error: %s", err)
-            self._connection = None
+            self._was_disconnected = True
+            await self._close_connection()
             return None
 
     async def _async_update_data(self) -> dict[str, Any]:
@@ -145,12 +170,16 @@ class WAS110Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             output = await self._async_run_command(combined_cmd)
             if output is None:
                 self._consecutive_errors += 1
+                self._total_errors += 1
+                self._poll_results.append(False)
                 raise UpdateFailed(
                     f"Failed to communicate with ONU at {self.host}"
                 )
 
             data["ssh_connected"] = True
             self._consecutive_errors = 0
+            self._total_updates += 1
+            self._poll_results.append(True)
 
             # Parse the combined output
             sections = self._parse_sections(output)
@@ -231,7 +260,38 @@ class WAS110Coordinator(DataUpdateCoordinator[dict[str, Any]]):
                 gtc_data = self._parse_gtc_counters(sections["GTC_COUNTERS"])
                 data.update(gtc_data)
 
+            # ONU reboot detection (uptime rollback)
+            current_uptime = data.get("onu_uptime")
+            if (
+                current_uptime is not None
+                and self._previous_uptime is not None
+                and current_uptime < self._previous_uptime
+            ):
+                self._reboot_count += 1
+                self._last_reboot_detected = datetime.now(UTC).isoformat()
+                _LOGGER.warning(
+                    "ONU reboot detected: uptime %s -> %s",
+                    self._previous_uptime,
+                    current_uptime,
+                )
+            if current_uptime is not None:
+                self._previous_uptime = current_uptime
+
+            # Health monitoring stats
             data["consecutive_errors"] = self._consecutive_errors
+            data["total_updates"] = self._total_updates
+            data["ssh_reconnections"] = self._ssh_reconnections
+            data["error_rate"] = round(
+                (self._total_errors / self._total_updates * 100)
+                if self._total_updates > 0
+                else 0,
+                2,
+            )
+            data["availability_pct"] = round(
+                sum(self._poll_results) / len(self._poll_results) * 100, 1
+            ) if self._poll_results else 100.0
+            data["onu_reboot_count"] = self._reboot_count
+            data["last_reboot_detected"] = self._last_reboot_detected
             return data
 
         except ConfigEntryAuthFailed:
@@ -240,6 +300,8 @@ class WAS110Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             raise
         except Exception as err:
             self._consecutive_errors += 1
+            self._total_errors += 1
+            self._poll_results.append(False)
             raise UpdateFailed(f"Error fetching ONU data: {err}") from err
 
     def _parse_sections(self, output: str) -> dict[str, str]:
@@ -456,7 +518,4 @@ class WAS110Coordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def async_close(self) -> None:
         """Close the SSH connection."""
-        if self._connection and not self._connection.is_closed:
-            self._connection.close()
-            await self._connection.wait_closed()
-            self._connection = None
+        await self._close_connection()

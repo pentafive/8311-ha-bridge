@@ -2,7 +2,7 @@
 
 """
 8311 HA Bridge - WAS-110 XGS-PON ONU to Home Assistant MQTT Bridge
-Version: 2.0.0
+Version: 2.1.0
 Author: pentafive
 Based on: Gemini session research + Claude architecture
 
@@ -54,7 +54,8 @@ HA_ENTITY_BASE = os.getenv("HA_ENTITY_BASE", "8311")
 DEBUG_MODE = os.getenv("DEBUG_MODE", "False").lower() == "true"
 TEST_MODE = os.getenv("TEST_MODE", "False").lower() == "true"
 PING_ENABLED = os.getenv("PING_ENABLED", "False").lower() == "true"
-VERSION = os.getenv("VERSION", "2.0.0")
+VERSION = os.getenv("VERSION", "2.1.0")
+AVAILABILITY_TOPIC = None  # Set after HA_ENTITY_BASE is loaded
 
 # ==============================================================================
 # --- Global Variables ---
@@ -74,8 +75,14 @@ stats = {
     'ssh_reconnections': 0,
     'last_error': None,
     'last_error_time': None,
-    'update_durations': []
+    'update_durations': [],
+    'poll_results': []
 }
+
+# ONU reboot detection
+previous_onu_uptime = None
+reboot_count = 0
+last_reboot_detected = None
 
 # PON State mapping
 PON_STATES = {
@@ -396,8 +403,9 @@ def on_disconnect_ha(client, userdata, flags, rc, properties=None):  # noqa: ARG
 
 def connect_mqtt():
     """Connect to Home Assistant MQTT broker"""
-    global ha_mqtt_client
+    global ha_mqtt_client, AVAILABILITY_TOPIC
 
+    AVAILABILITY_TOPIC = f"{HA_ENTITY_BASE}/bridge/status"
     print(f"Connecting to MQTT broker at {HA_MQTT_BROKER}:{HA_MQTT_PORT}...")
 
     ha_mqtt_client = mqtt.Client(
@@ -407,6 +415,9 @@ def connect_mqtt():
 
     ha_mqtt_client.on_connect = on_connect_ha
     ha_mqtt_client.on_disconnect = on_disconnect_ha
+
+    # Set Last Will and Testament for instant unavailability on crash
+    ha_mqtt_client.will_set(AVAILABILITY_TOPIC, "offline", qos=1, retain=True)
 
     if HA_MQTT_USER and HA_MQTT_PASS:
         ha_mqtt_client.username_pw_set(HA_MQTT_USER, HA_MQTT_PASS)
@@ -425,6 +436,8 @@ def connect_mqtt():
             print("✗ MQTT connection timeout")
             return False
 
+        # Publish online status
+        publish_mqtt(AVAILABILITY_TOPIC, "online", retain=True, qos=1)
         return True
     except Exception as e:
         print(f"✗ MQTT connection failed: {e}")
@@ -503,6 +516,8 @@ def publish_sensor_discovery(sensor_id, sensor_name, unit=None, device_class=Non
         config["entity_category"] = entity_category
     if not enabled_by_default:
         config["enabled_by_default"] = False
+    if AVAILABILITY_TOPIC:
+        config["availability"] = [{"topic": AVAILABILITY_TOPIC, "payload_available": "online", "payload_not_available": "offline"}]
 
     discovery_topic = f"{HA_DISCOVERY_PREFIX}/sensor/{device_id}/{sensor_id}/config"
     publish_mqtt(discovery_topic, config, retain=True, qos=1)
@@ -527,6 +542,8 @@ def publish_binary_sensor_discovery(sensor_id, sensor_name, device_class=None, i
         config["device_class"] = device_class
     if icon:
         config["icon"] = icon
+    if AVAILABILITY_TOPIC:
+        config["availability"] = [{"topic": AVAILABILITY_TOPIC, "payload_available": "online", "payload_not_available": "offline"}]
 
     discovery_topic = f"{HA_DISCOVERY_PREFIX}/binary_sensor/{device_id}/{sensor_id}/config"
     publish_mqtt(discovery_topic, config, retain=True, qos=1)
@@ -876,6 +893,15 @@ def publish_all_discovery():
     # System Statistics
     publish_sensor_discovery("bridge_uptime", "Bridge Uptime", "s", "duration", "mdi:timer-outline", "total_increasing")
 
+    # Health monitoring sensors (v2.1.0)
+    publish_sensor_discovery("consecutive_errors", "Consecutive Errors", None, None, "mdi:alert-circle", "measurement", "diagnostic")
+    publish_sensor_discovery("ssh_reconnections", "SSH Reconnections", None, None, "mdi:refresh", "total_increasing", "diagnostic")
+    publish_sensor_discovery("error_rate", "Error Rate", "%", None, "mdi:chart-line", "measurement", "diagnostic")
+    publish_sensor_discovery("total_updates", "Total Updates", None, None, "mdi:counter", "total_increasing", "diagnostic")
+    publish_sensor_discovery("availability_pct", "Availability", "%", None, "mdi:percent-circle", "measurement", "diagnostic")
+    publish_sensor_discovery("onu_reboot_count", "ONU Reboot Count", None, None, "mdi:restart", "total_increasing", "diagnostic")
+    publish_sensor_discovery("last_reboot_detected", "Last Reboot Detected", None, "timestamp", "mdi:restart-alert", None, "diagnostic")
+
     print("✓ Discovery configs published\n")
 
 def monitor_was_110():
@@ -1028,11 +1054,25 @@ def monitor_was_110():
                 # Update statistics
                 stats['total_updates'] += 1
                 stats['consecutive_errors'] = 0
+                stats['poll_results'].append(True)
+                if len(stats['poll_results']) > 60:
+                    stats['poll_results'] = stats['poll_results'][-60:]
+
+                # ONU reboot detection
+                global previous_onu_uptime, reboot_count, last_reboot_detected
+                if 'onu_uptime' in metrics:
+                    onu_uptime_secs = metrics['onu_uptime']
+                    if previous_onu_uptime is not None and onu_uptime_secs < previous_onu_uptime:
+                        reboot_count += 1
+                        last_reboot_detected = timestamp
+                        print(f"⚠ ONU reboot detected: uptime {previous_onu_uptime}s → {onu_uptime_secs}s")
+                    previous_onu_uptime = onu_uptime_secs
 
                 # Publish bridge statistics
                 uptime = int(time.time() - stats['start_time'])
                 avg_duration = sum(stats['update_durations']) / len(stats['update_durations']) if stats['update_durations'] else 0
                 error_rate = (stats['total_errors'] / stats['total_updates'] * 100) if stats['total_updates'] > 0 else 0
+                avail_pct = round(sum(stats['poll_results']) / len(stats['poll_results']) * 100, 1) if stats['poll_results'] else 100.0
 
                 publish_sensor_state("bridge_uptime", uptime, {
                     "total_updates": stats['total_updates'],
@@ -1047,6 +1087,15 @@ def monitor_was_110():
                     "version": VERSION
                 })
 
+                # Health monitoring sensors (v2.1.0)
+                publish_sensor_state("consecutive_errors", stats['consecutive_errors'], {"last_update": timestamp})
+                publish_sensor_state("ssh_reconnections", stats['ssh_reconnections'], {"last_update": timestamp})
+                publish_sensor_state("error_rate", round(error_rate, 2), {"last_update": timestamp})
+                publish_sensor_state("total_updates", stats['total_updates'], {"last_update": timestamp})
+                publish_sensor_state("availability_pct", avail_pct, {"last_update": timestamp, "window_size": len(stats['poll_results'])})
+                publish_sensor_state("onu_reboot_count", reboot_count, {"last_update": timestamp})
+                publish_sensor_state("last_reboot_detected", last_reboot_detected, {"last_update": timestamp})
+
                 # Periodic SSH status - confirms connection still healthy
                 publish_binary_sensor_state("ssh_connection_status", True, {
                     "last_update": timestamp,
@@ -1058,13 +1107,18 @@ def monitor_was_110():
 
             else:
                 print("⚠ Failed to collect metrics")
+                stats['poll_results'].append(False)
+                if len(stats['poll_results']) > 60:
+                    stats['poll_results'] = stats['poll_results'][-60:]
 
                 # Try to reconnect SSH after consecutive failures
                 if stats['consecutive_errors'] >= 3:
                     print("🔄 Attempting SSH reconnection...")
-                    if not connect_ssh():
-                        print("⚠ SSH reconnection failed, will retry next cycle")
+                    if connect_ssh():
                         stats['ssh_reconnections'] += 1
+                        print(f"✓ SSH reconnected (#{stats['ssh_reconnections']})")
+                    else:
+                        print("⚠ SSH reconnection failed, will retry next cycle")
 
             # Wait for next poll interval
             stop_event.wait(POLL_INTERVAL_SECONDS)
@@ -1176,6 +1230,8 @@ def main():
         stop_event.set()
 
         if ha_mqtt_client:
+            if AVAILABILITY_TOPIC:
+                publish_mqtt(AVAILABILITY_TOPIC, "offline", retain=True, qos=1)
             ha_mqtt_client.loop_stop()
             ha_mqtt_client.disconnect()
 

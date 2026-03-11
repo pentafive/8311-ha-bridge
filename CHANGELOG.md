@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-03-11
+
+### Fixed
+- **SSH Connection Leak** — When SSH timeout or error occurred, the old connection was orphaned without being closed. Leaked connections accumulated on the ONU, eventually overwhelming its SSH daemon. This was the root cause of both GitHub issue #2 and the 14-hour flapping event on 2026-03-10/11. ([#2](https://github.com/pentafive/8311-ha-bridge/issues/2))
+
+### Added
+- **MQTT Last Will & Testament** (Docker bridge) — Entities go unavailable instantly when the bridge process dies, instead of waiting for MQTT keepalive timeout
+- **Consecutive Errors sensor** — Real-time count of back-to-back poll failures (resets on success)
+- **SSH Reconnections sensor** — Lifetime counter of SSH reconnect events
+- **Error Rate sensor** — Percentage of total polls that failed
+- **Total Updates sensor** — Lifetime counter of successful polls
+- **Rolling Availability sensor** — Percentage of successful polls over the last 60 polling intervals (1-hour window at default interval)
+- **ONU Reboot Count sensor** — Detects uptime rollback and counts reboots
+- **Last Reboot Detected sensor** — Timestamp of most recent detected ONU reboot
+- All new sensors are diagnostic entities — they appear under the device but don't clutter the default dashboard
+
+### Fixed (Docker bridge)
+- SSH reconnection counter was incrementing on *failed* reconnects instead of successful ones
+
+### Changed
+- `async_close()` now uses a shared `_close_connection()` helper for consistent cleanup
+- SSH error paths properly close connections before reconnecting
+
+---
+
 ## [2.0.1] - 2025-12-27
 
 ### Added
@@ -109,6 +134,5 @@ The Docker/MQTT bridge (`8311-ha-bridge.py`) remains available for users who pre
 ## [Unreleased]
 
 ### Planned
-- Submit to HACS default repository
-- Optional SSH connection multiplexing (ControlMaster)
+- PON state change counter + bridge health enum sensor
 - Web UI scraping for additional metrics

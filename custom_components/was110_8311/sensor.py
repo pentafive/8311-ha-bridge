@@ -238,6 +238,58 @@ SENSOR_DESCRIPTIONS: tuple[SensorEntityDescription, ...] = (
         icon="mdi:signal-off",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
+    # Health monitoring sensors (v2.1.0)
+    SensorEntityDescription(
+        key="consecutive_errors",
+        name="Consecutive Errors",
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:alert-circle",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key="ssh_reconnections",
+        name="SSH Reconnections",
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        icon="mdi:refresh",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key="error_rate",
+        name="Error Rate",
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:chart-line",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key="total_updates",
+        name="Total Updates",
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        icon="mdi:counter",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key="availability_pct",
+        name="Availability",
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:percent-circle",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key="onu_reboot_count",
+        name="ONU Reboot Count",
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        icon="mdi:restart",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key="last_reboot_detected",
+        name="Last Reboot Detected",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        icon="mdi:restart-alert",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
 )
 
 

@@ -45,6 +45,12 @@ def mock_was110_data() -> dict:
         "pon_state_name": "O5.1 - Associated state",
         "pon_time_in_state": 86400,
         "consecutive_errors": 0,
+        "total_updates": 1,
+        "ssh_reconnections": 0,
+        "error_rate": 0.0,
+        "availability_pct": 100.0,
+        "onu_reboot_count": 0,
+        "last_reboot_detected": None,
     }
 
 
