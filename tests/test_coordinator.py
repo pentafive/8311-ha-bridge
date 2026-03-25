@@ -46,7 +46,7 @@ class TestStatsTracking:
         """Test successful poll increments total_updates."""
         # Mock a successful SSH command with valid output
         coordinator._connection = MagicMock()
-        coordinator._connection.is_closed = False
+        coordinator._connection.is_closed = MagicMock(return_value=False)
         mock_result = MagicMock()
         mock_result.stdout = (
             "---EEPROM50---\n---EEPROM51---\n"
@@ -76,7 +76,7 @@ class TestStatsTracking:
     async def test_failure_increments_errors(self, coordinator):
         """Test failed poll increments error counters."""
         coordinator._connection = MagicMock()
-        coordinator._connection.is_closed = False
+        coordinator._connection.is_closed = MagicMock(return_value=False)
         coordinator._connection.run = AsyncMock(side_effect=TimeoutError)
 
         with pytest.raises(UpdateFailed):
@@ -92,7 +92,7 @@ class TestStatsTracking:
 
         # Set up successful response
         coordinator._connection = MagicMock()
-        coordinator._connection.is_closed = False
+        coordinator._connection.is_closed = MagicMock(return_value=False)
         mock_result = MagicMock()
         mock_result.stdout = (
             "---SYSTEM_INFO---\n86400.50 80000.00\n"
@@ -119,7 +119,7 @@ class TestRollingAvailability:
         coordinator._poll_results = deque([True] * 10, maxlen=60)
 
         coordinator._connection = MagicMock()
-        coordinator._connection.is_closed = False
+        coordinator._connection.is_closed = MagicMock(return_value=False)
         mock_result = MagicMock()
         mock_result.stdout = "---SYSTEM_INFO---\n100.0 90.0\nMem: 999424 559564 316024 2804 123836 408896\n---END---"
         coordinator._connection.run = AsyncMock(return_value=mock_result)
@@ -161,7 +161,7 @@ class TestRebootDetection:
         coordinator._previous_uptime = 86400  # 1 day
 
         coordinator._connection = MagicMock()
-        coordinator._connection.is_closed = False
+        coordinator._connection.is_closed = MagicMock(return_value=False)
         mock_result = MagicMock()
         mock_result.stdout = "---SYSTEM_INFO---\n120.0 100.0\nMem: 999424 559564 316024 2804 123836 408896\n---END---"
         coordinator._connection.run = AsyncMock(return_value=mock_result)
@@ -178,7 +178,7 @@ class TestRebootDetection:
         coordinator._previous_uptime = 1000
 
         coordinator._connection = MagicMock()
-        coordinator._connection.is_closed = False
+        coordinator._connection.is_closed = MagicMock(return_value=False)
         mock_result = MagicMock()
         mock_result.stdout = "---SYSTEM_INFO---\n1060.0 900.0\nMem: 999424 559564 316024 2804 123836 408896\n---END---"
         coordinator._connection.run = AsyncMock(return_value=mock_result)
@@ -195,7 +195,7 @@ class TestSSHConnectionLeak:
     async def test_timeout_closes_connection(self, coordinator):
         """Test that timeout properly closes the old connection."""
         mock_conn = MagicMock()
-        mock_conn.is_closed = False
+        mock_conn.is_closed = MagicMock(return_value=False)
         mock_conn.close = MagicMock()
         mock_conn.wait_closed = AsyncMock()
         mock_conn.run = AsyncMock(side_effect=TimeoutError)
@@ -211,7 +211,7 @@ class TestSSHConnectionLeak:
     async def test_ssh_error_closes_connection(self, coordinator):
         """Test that SSH error properly closes the old connection."""
         mock_conn = MagicMock()
-        mock_conn.is_closed = False
+        mock_conn.is_closed = MagicMock(return_value=False)
         mock_conn.close = MagicMock()
         mock_conn.wait_closed = AsyncMock()
         mock_conn.run = AsyncMock(side_effect=OSError("Connection reset"))
@@ -229,7 +229,7 @@ class TestSSHConnectionLeak:
         coordinator._connection = None
 
         mock_conn = MagicMock()
-        mock_conn.is_closed = False
+        mock_conn.is_closed = MagicMock(return_value=False)
         mock_result = MagicMock()
         mock_result.stdout = "success"
         mock_conn.run = AsyncMock(return_value=mock_result)
@@ -242,3 +242,120 @@ class TestSSHConnectionLeak:
         assert result == "success"
         assert coordinator._ssh_reconnections == 1
         assert coordinator._was_disconnected is False
+
+
+class TestPontopAlarms:
+    """Test pontop alarm parsing (v2.2.0)."""
+
+    def test_no_alarms(self, coordinator):
+        """Test parsing when no alarms are active."""
+        output = (
+            "Page: Active alarms\n"
+            "Alarm type       Alarm                     Description\n"
+        )
+        result = coordinator._parse_pontop_alarms(output)
+        assert result["pon_alarms_active"] is False
+        assert "pon_alarm_types" not in result
+
+    def test_active_alarms(self, coordinator):
+        """Test parsing when alarms are present."""
+        output = (
+            "Page: Active alarms\n"
+            "Alarm type       Alarm                     Description\n"
+            "LEVEL            PON_ALARM_STATIC_LOS      Loss of signal\n"
+            "LEVEL            PON_ALARM_STATIC_LODS     Loss of downstream synchronization\n"
+        )
+        result = coordinator._parse_pontop_alarms(output)
+        assert result["pon_alarms_active"] is True
+        assert "PON_ALARM_STATIC_LOS" in result["pon_alarm_types"]
+        assert "PON_ALARM_STATIC_LODS" in result["pon_alarm_types"]
+
+    def test_empty_output(self, coordinator):
+        """Test parsing with empty output."""
+        result = coordinator._parse_pontop_alarms("")
+        assert result["pon_alarms_active"] is False
+
+
+class TestGEMCounters:
+    """Test GEM/XGEM port counter parsing (v2.2.0)."""
+
+    def test_parse_gem_counters(self, coordinator):
+        """Test parsing real GEM counter output."""
+        output = (
+            "Page: GEM/XGEM Port Counters\n"
+            "GEM Index       GEM ID          u/s packets     u/s bytes"
+            "       d/s packets     d/s bytes       Key Errors\n"
+            "0               14              462             22176"
+            "           454             21792           0\n"
+            "1               65534           0               0"
+            "               0               0               0\n"
+            "2               1068            254938585       197576881274"
+            "    313027027       299502232944    0\n"
+        )
+        result = coordinator._parse_gem_counters(output)
+        assert result["gem_downstream_bytes"] == 299502254736  # 21792 + 0 + 299502232944
+        assert result["gem_upstream_bytes"] == 197576903450  # 22176 + 0 + 197576881274
+        assert result["gem_key_errors"] == 0
+
+    def test_empty_gem_output(self, coordinator):
+        """Test parsing with no GEM data."""
+        result = coordinator._parse_gem_counters("")
+        assert result["gem_downstream_bytes"] == 0
+        assert result["gem_upstream_bytes"] == 0
+        assert result["gem_key_errors"] == 0
+
+    def test_gem_key_errors(self, coordinator):
+        """Test key errors are summed across ports."""
+        output = (
+            "Page: GEM/XGEM Port Counters\n"
+            "GEM Index       GEM ID          u/s packets     u/s bytes"
+            "       d/s packets     d/s bytes       Key Errors\n"
+            "0               14              10              100"
+            "             10              100             3\n"
+            "1               1068            100             1000"
+            "            100             1000            5\n"
+        )
+        result = coordinator._parse_gem_counters(output)
+        assert result["gem_key_errors"] == 8
+
+
+class TestOLTVendor:
+    """Test OLT vendor parsing from OMCI ME 131 attr 1 (v2.2.0)."""
+
+    def test_parse_olt_vendor(self, coordinator):
+        """Test parsing ALCL vendor from meadg output."""
+        output = "errorcode=0 attr_data=41 4c 43 4c"
+        result = coordinator._parse_olt_vendor(output)
+        assert result["olt_vendor"] == "ALCL"
+
+    def test_parse_huawei_vendor(self, coordinator):
+        """Test parsing HWTC vendor."""
+        output = "errorcode=0 attr_data=48 57 54 43"
+        result = coordinator._parse_olt_vendor(output)
+        assert result["olt_vendor"] == "HWTC"
+
+    def test_empty_output(self, coordinator):
+        """Test parsing with no OMCI data."""
+        result = coordinator._parse_olt_vendor("")
+        assert "olt_vendor" not in result
+
+    def test_error_output(self, coordinator):
+        """Test parsing when OMCI command fails."""
+        result = coordinator._parse_olt_vendor("errorcode=9")
+        assert "olt_vendor" not in result
+
+
+class TestCPULoad:
+    """Test CPU load parsing (v2.2.0)."""
+
+    def test_parse_loadavg(self, coordinator):
+        """Test parsing /proc/loadavg output."""
+        result = coordinator._parse_cpu_load("0.15 0.10 0.15 1/154 8337")
+        assert result["cpu_load_1m"] == 0.15
+        assert result["cpu_load_5m"] == 0.10
+        assert result["cpu_load_15m"] == 0.15
+
+    def test_empty_output(self, coordinator):
+        """Test parsing with empty output."""
+        result = coordinator._parse_cpu_load("")
+        assert "cpu_load_1m" not in result

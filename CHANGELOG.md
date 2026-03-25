@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2026-03-25
+
+### Fixed
+- **SSH Connection Leak (complete fix)** — `asyncssh.SSHClientConnection.is_closed` is a method, not a property. Without `()`, the bound method reference was always truthy, so connections were never detected as closed. Every poll created a new SSH connection without closing the old one, leaking ~1 sshd process/minute on the ONU. Thanks to [@markh0338](https://github.com/markh0338) for identifying the root cause. ([#2](https://github.com/pentafive/8311-ha-bridge/issues/2))
+
+### Added
+- **PON Alarms binary sensor** — Real-time alarm detection (LOS, LODS, LOF) via `pontop`, with alarm types as state attributes
+- **GEM Downstream/Upstream sensors** — Total fiber traffic counters (bytes) across all GEM ports via `pontop`
+- **GEM Key Errors sensor** — Encryption key error counter across all GEM ports
+- **OLT Vendor sensor** — ISP OLT equipment identification via OMCI ME 131
+- **CPU Load sensors** — 1m, 5m, 15m load averages from `/proc/loadavg`
+- All new sensors are diagnostic entities
+
+### Changed
+- Minimum `asyncssh` version bumped from `>=2.14.0` to `>=2.21.0` (required for `is_closed()` method)
+
+---
+
 ## [2.1.0] - 2026-03-11
 
 ### Fixed
@@ -134,5 +152,4 @@ The Docker/MQTT bridge (`8311-ha-bridge.py`) remains available for users who pre
 ## [Unreleased]
 
 ### Planned
-- PON state change counter + bridge health enum sensor
-- Web UI scraping for additional metrics
+- HTTP `/cgi-bin/luci/8311/metrics` as alternative transport (firmware v2.8.2+, no SSH required)

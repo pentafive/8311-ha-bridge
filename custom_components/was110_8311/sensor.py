@@ -238,6 +238,60 @@ SENSOR_DESCRIPTIONS: tuple[SensorEntityDescription, ...] = (
         icon="mdi:signal-off",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
+    # GEM port traffic counters (v2.2.0)
+    SensorEntityDescription(
+        key="gem_downstream_bytes",
+        name="GEM Downstream",
+        native_unit_of_measurement=UnitOfInformation.BYTES,
+        device_class=SensorDeviceClass.DATA_SIZE,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        icon="mdi:arrow-down-bold",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key="gem_upstream_bytes",
+        name="GEM Upstream",
+        native_unit_of_measurement=UnitOfInformation.BYTES,
+        device_class=SensorDeviceClass.DATA_SIZE,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        icon="mdi:arrow-up-bold",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key="gem_key_errors",
+        name="GEM Key Errors",
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        icon="mdi:key-alert",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    # OLT and system info (v2.2.0)
+    SensorEntityDescription(
+        key="olt_vendor",
+        name="OLT Vendor",
+        icon="mdi:server-network",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key="cpu_load_1m",
+        name="CPU Load (1m)",
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:cpu-64-bit",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key="cpu_load_5m",
+        name="CPU Load (5m)",
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:cpu-64-bit",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key="cpu_load_15m",
+        name="CPU Load (15m)",
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:cpu-64-bit",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
     # Health monitoring sensors (v2.1.0)
     SensorEntityDescription(
         key="consecutive_errors",

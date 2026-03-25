@@ -93,7 +93,7 @@ class WAS110Coordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _close_connection(self) -> None:
         """Close the SSH connection gracefully."""
-        if self._connection and not self._connection.is_closed:
+        if self._connection and not self._connection.is_closed():
             self._connection.close()
             with contextlib.suppress(Exception):
                 await asyncio.wait_for(self._connection.wait_closed(), timeout=5)
@@ -102,7 +102,7 @@ class WAS110Coordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _async_run_command(self, command: str) -> str | None:
         """Run a command on the ONU."""
         try:
-            if self._connection is None or self._connection.is_closed:
+            if self._connection is None or self._connection.is_closed():
                 if self._was_disconnected:
                     self._ssh_reconnections += 1
                     _LOGGER.debug("SSH reconnection #%d", self._ssh_reconnections)
@@ -164,6 +164,14 @@ class WAS110Coordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "cat /proc/uptime 2>/dev/null && free 2>/dev/null | grep Mem && "
                 "echo '---GTC_COUNTERS---' && "
                 "pon gtc_counters_get 2>/dev/null && "
+                "echo '---PONTOP_ALARMS---' && "
+                "pontop -b -g w 2>/dev/null && "
+                "echo '---GEM_COUNTERS---' && "
+                "pontop -b -g 'GEM/XGEM Port Counters' 2>/dev/null && "
+                "echo '---OLT_VENDOR---' && "
+                "omci_pipe.sh meadg 131 0 1 2>/dev/null && "
+                "echo '---CPU_LOAD---' && "
+                "cat /proc/loadavg 2>/dev/null && "
                 "echo '---END---'"
             )
 
@@ -259,6 +267,28 @@ class WAS110Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             if "GTC_COUNTERS" in sections:
                 gtc_data = self._parse_gtc_counters(sections["GTC_COUNTERS"])
                 data.update(gtc_data)
+
+            # Parse pontop alarms (v2.2.0)
+            if "PONTOP_ALARMS" in sections:
+                alarm_data = self._parse_pontop_alarms(
+                    sections["PONTOP_ALARMS"]
+                )
+                data.update(alarm_data)
+
+            # Parse GEM/XGEM port counters (v2.2.0)
+            if "GEM_COUNTERS" in sections:
+                gem_data = self._parse_gem_counters(sections["GEM_COUNTERS"])
+                data.update(gem_data)
+
+            # Parse OLT vendor (v2.2.0)
+            if "OLT_VENDOR" in sections:
+                olt_data = self._parse_olt_vendor(sections["OLT_VENDOR"])
+                data.update(olt_data)
+
+            # Parse CPU load (v2.2.0)
+            if "CPU_LOAD" in sections:
+                load_data = self._parse_cpu_load(sections["CPU_LOAD"])
+                data.update(load_data)
 
             # ONU reboot detection (uptime rollback)
             current_uptime = data.get("onu_uptime")
@@ -507,6 +537,114 @@ class WAS110Coordinator(DataUpdateCoordinator[dict[str, Any]]):
         if len(temps) >= 2:
             data["cpu1_temperature"] = round(temps[1], 1)
 
+        return data
+
+    def _parse_pontop_alarms(self, output: str) -> dict[str, Any]:
+        """Parse pontop active alarms.
+
+        Output format when no alarms:
+            Page: Active alarms
+            Alarm type       Alarm                     Description
+
+        When alarms active, data rows follow the header.
+        """
+        data: dict[str, Any] = {"pon_alarms_active": False}
+        lines = output.strip().split("\n")
+
+        # Skip header lines (Page:, column headers, empty lines)
+        alarm_types = []
+        for line in lines:
+            line = line.strip()
+            if (
+                not line
+                or line.startswith("Page:")
+                or line.startswith("Alarm type")
+            ):
+                continue
+            # Any remaining non-empty line is an active alarm
+            # Format: "LEVEL  PON_ALARM_STATIC_LOS  Loss of signal"
+            parts = line.split(None, 2)
+            if len(parts) >= 2:
+                alarm_types.append(parts[1])
+            elif parts:
+                alarm_types.append(parts[0])
+
+        if alarm_types:
+            data["pon_alarms_active"] = True
+            data["pon_alarm_types"] = ", ".join(alarm_types)
+        return data
+
+    def _parse_gem_counters(self, output: str) -> dict[str, Any]:
+        """Parse GEM/XGEM port counters from pontop.
+
+        Output format:
+            Page: GEM/XGEM Port Counters
+            GEM Index  GEM ID  u/s packets  u/s bytes  d/s packets  d/s bytes  Key Errors
+            0          14      462          22176      454          21792      0
+            2          1068    254938585    1.98e+11   313027027    2.99e+11   0
+        """
+        data: dict[str, Any] = {}
+        total_us_bytes = 0
+        total_ds_bytes = 0
+        total_key_errors = 0
+        lines = output.strip().split("\n")
+
+        for line in lines:
+            line = line.strip()
+            if (
+                not line
+                or line.startswith("Page:")
+                or line.startswith("GEM Index")
+            ):
+                continue
+            parts = line.split()
+            if len(parts) >= 7:
+                with contextlib.suppress(ValueError):
+                    total_us_bytes += int(parts[3])
+                    total_ds_bytes += int(parts[5])
+                    total_key_errors += int(parts[6])
+
+        data["gem_upstream_bytes"] = total_us_bytes
+        data["gem_downstream_bytes"] = total_ds_bytes
+        data["gem_key_errors"] = total_key_errors
+        return data
+
+    def _parse_olt_vendor(self, output: str) -> dict[str, Any]:
+        """Parse OLT vendor from OMCI ME 131 attribute 1 output.
+
+        Output format: errorcode=0 attr_data=41 4c 43 4c
+        The hex bytes are ASCII for the vendor ID (e.g., ALCL = Nokia).
+        """
+        data: dict[str, Any] = {}
+
+        for part in output.split():
+            if "=" in part:
+                key, value = part.split("=", 1)
+                if key == "attr_data":
+                    # Remaining output after attr_data= is space-separated hex
+                    hex_start = output.index("attr_data=") + len("attr_data=")
+                    hex_str = output[hex_start:].strip()
+                    with contextlib.suppress(ValueError):
+                        vendor = bytes.fromhex(
+                            hex_str.replace(" ", "")
+                        ).decode("ascii", errors="ignore").strip()
+                        if vendor:
+                            data["olt_vendor"] = vendor
+                    break
+        return data
+
+    def _parse_cpu_load(self, output: str) -> dict[str, Any]:
+        """Parse /proc/loadavg output.
+
+        Format: "0.15 0.10 0.15 1/154 8337"
+        """
+        data: dict[str, Any] = {}
+        parts = output.strip().split()
+        if len(parts) >= 3:
+            with contextlib.suppress(ValueError):
+                data["cpu_load_1m"] = float(parts[0])
+                data["cpu_load_5m"] = float(parts[1])
+                data["cpu_load_15m"] = float(parts[2])
         return data
 
     @staticmethod

@@ -9,10 +9,12 @@ from homeassistant.components.binary_sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
+    ATTR_ALARM_TYPES,
     ATTR_CONSECUTIVE_ERRORS,
     ATTR_STATE_CODE,
     ATTR_STATE_NAME,
@@ -36,6 +38,13 @@ BINARY_SENSOR_DESCRIPTIONS: tuple[BinarySensorEntityDescription, ...] = (
         name="SSH Connection",
         device_class=BinarySensorDeviceClass.CONNECTIVITY,
         icon="mdi:ssh",
+    ),
+    BinarySensorEntityDescription(
+        key="pon_alarms_active",
+        name="PON Alarms",
+        device_class=BinarySensorDeviceClass.PROBLEM,
+        icon="mdi:alert-octagon",
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
 )
 
@@ -113,6 +122,11 @@ class WAS110BinarySensor(CoordinatorEntity[WAS110Coordinator], BinarySensorEntit
             attrs[ATTR_CONSECUTIVE_ERRORS] = self.coordinator.data.get(
                 "consecutive_errors", 0
             )
+
+        if self.entity_description.key == "pon_alarms_active":
+            alarm_types = self.coordinator.data.get("pon_alarm_types")
+            if alarm_types:
+                attrs[ATTR_ALARM_TYPES] = alarm_types
 
         return attrs
 

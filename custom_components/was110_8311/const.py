@@ -21,6 +21,7 @@ ATTR_STATE_NAME: Final = "state_name"
 ATTR_TIME_IN_STATE: Final = "time_in_state_seconds"
 ATTR_TIME_IN_STATE_FORMATTED: Final = "time_in_state_formatted"
 ATTR_CONSECUTIVE_ERRORS: Final = "consecutive_errors"
+ATTR_ALARM_TYPES: Final = "alarm_types"
 
 # ISP detection from GPON serial prefix
 # Reference: https://pon.wiki and https://hack-gpon.org/vendor/
