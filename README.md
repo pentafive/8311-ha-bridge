@@ -14,9 +14,11 @@ Monitor your XGS-PON fiber ONU running [8311 community firmware](https://github.
 ## Features
 
 - **Real-time Fiber Monitoring** - RX/TX optical power, voltage, laser bias current
+- **Fiber Traffic Counters** - GEM port downstream/upstream bytes, key error tracking
 - **Temperature Tracking** - Optic module and CPU temperatures
-- **Link Status** - PON state with detailed status codes
-- **Device Information** - Vendor, part number, firmware bank, PON mode
+- **Link Status** - PON state with detailed status codes, PON alarm detection (LOS/LODS/LOF)
+- **Device Information** - Vendor, part number, firmware bank, PON mode, OLT vendor
+- **System Monitoring** - CPU load, memory usage, ONU uptime
 - **Health Monitoring** - Rolling availability, error tracking, SSH reconnection counting, ONU reboot detection
 - **Two Deployment Options** - Native HACS integration or Docker/MQTT bridge
 
@@ -71,9 +73,10 @@ See [Alternative Deployments](https://github.com/pentafive/8311-ha-bridge/wiki/A
 |----------|---------|
 | **Optical** | RX Power (dBm/mW), TX Power (dBm/mW), Voltage, TX Bias Current |
 | **Temperature** | Optic Temperature, CPU0 Temperature, CPU1 Temperature |
-| **Network** | PON Link Status, SSH Connection, Ethernet Speed, PON State |
-| **Device Info** | Vendor, Part Number, Hardware Revision, PON Mode, Firmware Bank, ISP, Module Type |
-| **System** | ONU Uptime, Memory Usage, Memory Used |
+| **Network** | PON Link Status, SSH Connection, PON Alarms (LOS/LODS/LOF), Ethernet Speed, PON State |
+| **Fiber Traffic** | GEM Downstream (bytes), GEM Upstream (bytes), GEM Key Errors |
+| **Device Info** | Vendor, Part Number, Hardware Revision, PON Mode, Firmware Bank, ISP, Module Type, OLT Vendor |
+| **System** | ONU Uptime, Memory Usage, Memory Used, CPU Load (1m/5m/15m) |
 | **Diagnostics** | GPON Serial, PON Vendor ID, GTC BIP Errors, GTC FEC Corrected/Uncorrected, LODS Events |
 | **Health Monitoring** | Consecutive Errors, SSH Reconnections, Error Rate, Total Updates, Availability %, ONU Reboot Count, Last Reboot Detected |
 
@@ -130,7 +133,9 @@ The integration reads from multiple sources on the ONU:
 3. **sysfs** - CPU temperatures, ethernet speed
 4. **8311 shell** - PON status, firmware bank, GTC counters
 5. **UCI config** - PON mode, GPON serial, vendor ID
-6. **/proc** - System uptime, memory usage
+6. **pontop** - PON alarms, GEM port traffic counters
+7. **OMCI** - OLT vendor identification (ME 131)
+8. **/proc** - System uptime, memory usage, CPU load
 
 ## Version History
 
@@ -138,6 +143,7 @@ See [CHANGELOG.md](CHANGELOG.md) for full release history.
 
 | Version | Type | Description |
 |---------|------|-------------|
+| 2.2.0 | HACS | SSH leak complete fix, PON alarms, GEM traffic, OLT vendor, CPU load |
 | 2.1.0 | Both | Health monitoring sensors, SSH leak fix, MQTT LWT |
 | 2.0.0 | HACS | Native Home Assistant integration |
 | 1.0.x | Docker | MQTT bridge for container deployment |
