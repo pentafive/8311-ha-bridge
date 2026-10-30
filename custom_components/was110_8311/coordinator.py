@@ -52,7 +52,7 @@ class WAS110Coordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._poll_results: deque[bool] = deque(maxlen=60)
         self._previous_uptime: int | None = None
         self._reboot_count: int = 0
-        self._last_reboot_detected: str | None = None
+        self._last_reboot_detected: datetime | None = None
 
         scan_interval = entry.options.get(
             CONF_SCAN_INTERVAL,
@@ -298,7 +298,8 @@ class WAS110Coordinator(DataUpdateCoordinator[dict[str, Any]]):
                 and current_uptime < self._previous_uptime
             ):
                 self._reboot_count += 1
-                self._last_reboot_detected = datetime.now(UTC).isoformat()
+                # timestamp sensors need an aware datetime, not an ISO string
+                self._last_reboot_detected = datetime.now(UTC)
                 _LOGGER.warning(
                     "ONU reboot detected: uptime %s -> %s",
                     self._previous_uptime,

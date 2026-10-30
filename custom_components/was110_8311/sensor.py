@@ -1,6 +1,8 @@
 """Sensor platform for 8311 ONU Monitor."""
 from __future__ import annotations
 
+from datetime import datetime
+
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
@@ -392,7 +394,7 @@ class WAS110Sensor(CoordinatorEntity[WAS110Coordinator], SensorEntity):
         )
 
     @property
-    def native_value(self) -> float | str | None:
+    def native_value(self) -> float | str | datetime | None:
         """Return the state of the sensor."""
         if self.coordinator.data is None:
             return None
